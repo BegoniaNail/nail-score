@@ -245,6 +245,58 @@
     background: var(--primary-light);
     color: var(--primary-dark);
   }
+  /* 款式搜索下拉 */
+  .style-search { position: relative; }
+  .style-search input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+  }
+  .style-search input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-light);
+  }
+  .style-search-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    z-index: 100;
+    display: none;
+  }
+  .style-search-list.show { display: block; }
+  .style-search-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .style-search-item:last-child { border-bottom: none; }
+  .style-search-item:hover, .style-search-item.active {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+  }
+  .style-search-item .ss-score {
+    float: right;
+    font-size: 12px;
+    color: var(--text-light);
+  }
+  .style-search-empty {
+    padding: 12px;
+    text-align: center;
+    color: var(--text-light);
+    font-size: 13px;
+  }
   .rank-1 { color: #e0a030; font-weight: 700; }
   .rank-2 { color: #a0a0a0; font-weight: 700; }
   .rank-3 { color: #cd7f5c; font-weight: 700; }
@@ -1200,12 +1252,18 @@ function renderStyleRows() {
     updatePreview();
     return;
   }
-  const opts = DB.styles.map(s => `<option value="${s.id}">${s.name}（${s.score}分/副）</option>`).join('');
   tbody.innerHTML = styleRows.map((r, i) => {
     const s = DB.styles.find(x => x.id === r.styleId);
     const sub = s ? (s.score * (r.count || 0)).toFixed(2) : '0';
+    const displayName = s ? `${s.name}（${s.score}分/副）` : '';
     return `<tr>
-      <td><select onchange="updateRowStyle(${i}, this.value)">${DB.styles.map(s2 => `<option value="${s2.id}" ${s2.id===r.styleId?'selected':''}>${s2.name}（${s2.score}分/副）</option>`).join('')}</select></td>
+      <td><div class="style-search" id="ss-${i}">
+        <input type="text" value="${displayName}" placeholder="输入款式名搜索…"
+          oninput="filterStyleSearch(${i}, this.value)"
+          onfocus="openStyleSearch(${i})"
+          onblur="setTimeout(function(){closeStyleSearch(${i});},200)">
+        <div class="style-search-list" id="ss-list-${i}"></div>
+      </div></td>
       <td><input type="number" value="${r.count}" min="1" step="1" oninput="updateRowCount(${i}, this.value)" style="width:80px;"></td>
       <td style="color:var(--primary-dark);font-weight:600;">${sub}</td>
       <td><button class="btn btn-sm btn-danger" onclick="delStyleRow(${i})">删除</button></td>
@@ -1213,10 +1271,61 @@ function renderStyleRows() {
   }).join('');
   updatePreview();
 }
+function filterStyleSearch(i, keyword) {
+  // 实时过滤，但不立即改变 styleId（用户可能还在输入）
+  openStyleSearch(i, keyword);
+}
+function openStyleSearch(i, keyword) {
+  const listEl = document.getElementById('ss-list-' + i);
+  if (!listEl) return;
+  const input = document.querySelector('#ss-' + i + ' input');
+  const kw = (keyword !== undefined ? keyword : input.value).trim().toLowerCase();
+  // 过滤款式
+  let matches = DB.styles;
+  if (kw) {
+    matches = DB.styles.filter(s => s.name.toLowerCase().includes(kw));
+  }
+  if (!matches.length) {
+    listEl.innerHTML = `<div class="style-search-empty">无匹配款式</div>`;
+  } else {
+    listEl.innerHTML = matches.map(s => 
+      `<div class="style-search-item" onmousedown="pickStyleSearch(${i}, '${s.id}')">${s.name}<span class="ss-score">${s.score}分/副</span></div>`
+    ).join('');
+  }
+  listEl.classList.add('show');
+}
+function closeStyleSearch(i) {
+  const listEl = document.getElementById('ss-list-' + i);
+  if (listEl) listEl.classList.remove('show');
+  // 恢复输入框显示为当前选中款式的名称
+  const s = DB.styles.find(x => x.id === styleRows[i].styleId);
+  const input = document.querySelector('#ss-' + i + ' input');
+  if (input && s) input.value = `${s.name}（${s.score}分/副）`;
+}
+function pickStyleSearch(i, styleId) {
+  styleRows[i].styleId = styleId;
+  const s = DB.styles.find(x => x.id === styleId);
+  const input = document.querySelector('#ss-' + i + ' input');
+  if (input && s) input.value = `${s.name}（${s.score}分/副）`;
+  closeStyleSearch(i);
+  // 更新小计
+  const sub = s ? (s.score * (styleRows[i].count || 0)).toFixed(2) : '0';
+  const td = input.closest('td').nextElementSibling.nextElementSibling;
+  if (td) td.textContent = sub;
+  updatePreview();
+}
 function updateRowStyle(i, val) { styleRows[i].styleId = val; renderStyleRows(); }
 function updateRowCount(i, val) {
   styleRows[i].count = Math.max(1, parseInt(val) || 1);
-  renderStyleRows();
+  // 只更新小计，不重新渲染（避免输入框失焦）
+  const s = DB.styles.find(x => x.id === styleRows[i].styleId);
+  const sub = s ? (s.score * (styleRows[i].count || 0)).toFixed(2) : '0';
+  const input = document.querySelector('#ss-' + i + ' input');
+  if (input) {
+    const td = input.closest('td').nextElementSibling.nextElementSibling;
+    if (td) td.textContent = sub;
+  }
+  updatePreview();
 }
 
 function addRecord() {
