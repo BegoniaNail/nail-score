@@ -2252,26 +2252,30 @@ function renderMonthly() {
           <div style="font-size:16px;opacity:0.95;font-weight:600;">美甲师 · 时间：${monthName}</div>
         </div>
       </div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;">
-        <div>
-          <div style="font-size:13px;opacity:0.85;">当月总副数</div>
-          <div style="font-size:24px;font-weight:700;">${totalCount} 副</div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:13px;opacity:0.85;">当月总副数</div>
+            <div style="font-size:24px;font-weight:700;">${totalCount} 副</div>
+          </div>
+          <div>
+            <div style="font-size:13px;opacity:0.85;">当月做款积分</div>
+            <div style="font-size:24px;font-weight:700;">${totalScore.toFixed(2)} 分</div>
+          </div>
         </div>
-        <div>
-          <div style="font-size:13px;opacity:0.85;">当月做款积分</div>
-          <div style="font-size:24px;font-weight:700;">${totalScore.toFixed(2)} 分</div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:13px;opacity:0.85;">当月打版数量</div>
+            <div style="font-size:24px;font-weight:700;">${designCount} 款</div>
+          </div>
+          <div>
+            <div style="font-size:13px;opacity:0.85;">打版合计积分</div>
+            <div style="font-size:24px;font-weight:700;">${designScore.toFixed(2)} 分</div>
+          </div>
         </div>
-        <div style="background:rgba(255,215,0,0.95);color:var(--primary-dark);padding:8px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background:rgba(255,215,0,0.95);color:var(--primary-dark);padding:10px 16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);align-self:flex-start;">
           <div style="font-size:13px;opacity:0.9;font-weight:600;">⭐ 当月总积分</div>
           <div style="font-size:26px;font-weight:800;color:var(--primary-dark);">${grandTotalScore.toFixed(2)} 分</div>
-        </div>
-        <div>
-          <div style="font-size:13px;opacity:0.85;">当月打版数量</div>
-          <div style="font-size:24px;font-weight:700;">${designCount} 款</div>
-        </div>
-        <div>
-          <div style="font-size:13px;opacity:0.85;">打版合计积分</div>
-          <div style="font-size:24px;font-weight:700;">${designScore.toFixed(2)} 分</div>
         </div>
       </div>
     </div>
