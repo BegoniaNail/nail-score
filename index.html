@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>美甲师计分系统</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -403,7 +406,7 @@
 <body>
 <div class="header">
   <h1>💅 美甲师计分系统</h1>
-  <p>按款式自动计分 · 多维度统计 · 云端同步</p>
+  <p>按款式自动计分 · 多维度统计 · 云端同步 <span style="font-size:10px;opacity:0.5;">v2.4</span></p>
 </div>
 
 <div class="container">
@@ -3126,6 +3129,7 @@ if (!DB.admins.length) {
   DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
 }
 saveLocal();
+setSync('syncing'); // 初始显示同步中
 document.getElementById('rec-date').value = todayStr();
 document.getElementById('monthly-month').value = currentMonthStr();
 document.getElementById('designerstat-month').value = currentMonthStr();
