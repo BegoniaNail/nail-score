@@ -1985,20 +1985,20 @@ function renderDesignerStat() {
         ${avatarHTML(d.designer, 'avatar-sm')}
         <div style="font-weight:600;font-size:16px;">${d.name}</div>
         <div style="margin-left:auto;font-size:13px;color:var(--text-light);">
-          打版 <strong style="color:var(--primary);">${d.totalCount}</strong> 款 · 总计 <strong style="color:var(--primary);">${d.totalScore.toFixed(2)}</strong> 分
+          打版 <strong style="color:var(--primary);">${d.totalCount}</strong> 款 · 合计 <strong style="color:var(--primary);">${d.totalScore.toFixed(2)}</strong> 分
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th style="width:50%;">款式名称</th><th style="width:25%;">打版日期</th><th style="width:25%;">积分</th></tr></thead><tbody>`;
+        <thead><tr><th style="width:50%;">款式名称</th><th style="width:25%;">打版日期</th><th style="width:25%;">打版数量</th></tr></thead><tbody>`;
     const styles = Object.values(d.styles);
     styles.forEach(s => {
       html += `<tr>
         <td>${s.name}</td>
         <td>${s.createDate || '-'}</td>
-        <td>${s.score.toFixed(2)}</td>
+        <td>1</td>
       </tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${d.totalScore.toFixed(2)}</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${d.totalCount}</td></tr>`;
     html += `</tbody></table></div></div>`;
   });
 
