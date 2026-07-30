@@ -1245,6 +1245,17 @@ function setSync(state) {
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
+// 格式化数字：保留原始小数，去掉多余尾零（不四舍五入）
+// 例：5.00 → "5"，5.50 → "5.5"，5.123 → "5.12"，5 → "5"
+function fmt(n) {
+  if (n == null || isNaN(n)) return '0';
+  n = +n;
+  // 先截断到两位小数（不四舍五入）
+  n = Math.floor(n * 100) / 100;
+  // 去掉多余尾零
+  return (parseFloat(n.toFixed(2))).toString();
+}
+
 // ===== Token 输入管理 =====
 let tokenCallback = null;
 function promptToken(cb) {
@@ -1729,7 +1740,7 @@ function renderStyleRows() {
   tbody.innerHTML = styleRows.map((r, i) => {
     const s = DB.styles.find(x => x.id === r.styleId);
     const sub = s ? (s.score * (r.count || 0)) : 0;
-    const subStr = sub % 1 === 0 ? sub.toString() : sub.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    const subStr = fmt(sub);
     const displayName = s ? `${s.name}（${s.score}分/副）` : '';
     return `<tr>
       <td><div class="style-search" id="ss-${i}">
@@ -1785,7 +1796,7 @@ function pickStyleSearch(i, styleId) {
   closeStyleSearch(i);
   // 更新小计（保留原始小数）
   const sub = s ? (s.score * (styleRows[i].count || 0)) : 0;
-  const subStr = sub % 1 === 0 ? sub.toString() : sub.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  const subStr = fmt(sub);
   const td = input.closest('td').nextElementSibling.nextElementSibling;
   if (td) td.textContent = subStr;
   updatePreview();
@@ -1797,7 +1808,7 @@ function updateRowCount(i, val) {
   // 只更新小计，不重新渲染（避免输入框失焦）
   const s = DB.styles.find(x => x.id === styleRows[i].styleId);
   const sub = s ? (s.score * (styleRows[i].count || 0)) : 0;
-  const subStr = sub % 1 === 0 ? sub.toString() : sub.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  const subStr = fmt(sub);
   const input = document.querySelector('#ss-' + i + ' input');
   if (input) {
     const td = input.closest('td').nextElementSibling.nextElementSibling;
@@ -1836,7 +1847,7 @@ function addRecord() {
   styleRows = [];
   document.getElementById('rec-note').value = '';
   renderStyleRows();
-  toast(`录入成功：${added} 条记录，共 ${+totalScore.toFixed(2)} 分`);
+  toast(`录入成功：${added} 条记录，共 ${fmt(totalScore)} 分`);
   renderAll();
 }
 function delRecord(id) {
@@ -1929,7 +1940,7 @@ function updatePreview() {
     if (s && c > 0) { total += s.score * c; valid++; }
   });
   if (valid > 0) {
-    const totalStr = total % 1 === 0 ? total.toString() : +total.toFixed(2);
+    const totalStr = fmt(total);
     el.innerHTML = `共 <strong style="color:var(--primary)">${valid}</strong> 个款式，预计总积分：<strong style="color:var(--primary)">${totalStr}</strong> 分`;
   } else {
     el.textContent = '';
@@ -1962,7 +1973,7 @@ function renderArtists() {
     return `<tr>
       <td>${avatarHTML(a, 'avatar-sm')}</td>
       <td>${a.name}</td>
-      <td>${totalScore.toFixed(2)}</td>
+      <td>${fmt(totalScore)}</td>
       <td>${totalCount}</td>
       <td>
         <button class="btn btn-sm btn-edit" onclick="editArtist('${a.id}')">编辑</button>
@@ -1998,7 +2009,7 @@ function renderRecordPanel() {
     <div class="stat-card"><div class="num">${DB.artists.length}</div><div class="label">美甲师数</div></div>
     <div class="stat-card"><div class="num">${DB.styles.length}</div><div class="label">款式数</div></div>
     <div class="stat-card"><div class="num">${totalCount}</div><div class="label">累计副数</div></div>
-    <div class="stat-card"><div class="num">${totalScore.toFixed(1)}</div><div class="label">累计积分</div></div>
+    <div class="stat-card"><div class="num">${fmt(totalScore)}</div><div class="label">累计积分</div></div>
     <div class="stat-card"><div class="num">${todayCount}</div><div class="label">今日副数</div></div>
   `;
   // 最近记录
@@ -2031,7 +2042,7 @@ function renderDetail() {
   const el = document.getElementById('detail-list');
   const totalScore = recs.reduce((s,r) => s+r.score, 0);
   const totalCount = recs.reduce((s,r) => s+r.count, 0);
-  document.getElementById('detail-summary').textContent = `共 ${recs.length} 条，${totalCount} 副，${totalScore.toFixed(2)} 分`;
+  document.getElementById('detail-summary').textContent = `共 ${recs.length} 条，${totalCount} 副，${fmt(totalScore)} 分`;
   if (!recs.length) { el.innerHTML = `<tr><td colspan="6" class="empty">无匹配记录</td></tr>`; return; }
   el.innerHTML = recs.map(r => `<tr>
     <td>${r.date}</td>
@@ -2085,7 +2096,7 @@ function renderRank() {
   const grandCount = data.reduce((s,d) => s+d.count, 0);
   const grandScore = data.reduce((s,d) => s+d.score, 0);
   document.getElementById('rank-summary').textContent =
-    data.length ? `${monthName} · 共 ${data.length} 人 · ${grandCount} 副 · ${grandScore.toFixed(2)} 分` : `${monthName} · 暂无数据`;
+    data.length ? `${monthName} · 共 ${data.length} 人 · ${grandCount} 副 · ${fmt(grandScore)} 分` : `${monthName} · 暂无数据`;
 
   if (!data.length) { el.innerHTML = `<tr><td colspan="4" class="empty">${monthName} 暂无记录</td></tr>`; return; }
   el.innerHTML = data.map((d,i) => {
@@ -2096,7 +2107,7 @@ function renderRank() {
       <td class="${cls}">${medal}</td>
       <td><div class="avatar-cell">${avatarHTML(d.artist, 'avatar-sm')} ${d.name}</div></td>
       <td>${d.count}</td>
-      <td><strong>${d.score.toFixed(2)}</strong></td>
+      <td><strong>${fmt(d.score)}</strong></td>
     </tr>`;
   }).join('');
 }
@@ -2123,8 +2134,8 @@ function renderPeriod() {
   let totalC = 0, totalS = 0;
   el.innerHTML = keys.map(k => {
     totalC += groups[k].count; totalS += groups[k].score;
-    return `<tr><td>${k}</td><td>${groups[k].count}</td><td>${groups[k].score.toFixed(2)}</td></tr>`;
-  }).join('') + `<tr class="total-row"><td>合计</td><td>${totalC}</td><td>${totalS.toFixed(2)}</td></tr>`;
+    return `<tr><td>${k}</td><td>${groups[k].count}</td><td>${fmt(groups[k].score)}</td></tr>`;
+  }).join('') + `<tr class="total-row"><td>合计</td><td>${totalC}</td><td>${fmt(totalS)}</td></tr>`;
 }
 function periodKey(date, type) {
   const [y,m,d] = date.split('-').map(Number);
@@ -2155,18 +2166,18 @@ function renderCross() {
       const recs = DB.records.filter(r => r.styleId === s.id && r.artistId === a.id);
       const count = recs.reduce((sum,r)=>sum+r.count,0);
       const score = recs.reduce((sum,r)=>sum+r.score,0);
-      const val = mode === 'count' ? count : +score.toFixed(2);
+      const val = mode === 'count' ? count : fmt(score);
       rowTotal += val;
       colTotals[i] += val;
       html += `<td>${val || '-'}</td>`;
     });
-    html += `<td><strong>${+rowTotal.toFixed(2)}</strong></td></tr>`;
+    html += `<td><strong>${fmt(rowTotal)}</strong></td></tr>`;
   });
   // 合计行
   html += `<tr class="total-row"><td>合计</td>`;
-  colTotals.forEach(c => html += `<td>${+c.toFixed(2)}</td>`);
+  colTotals.forEach(c => html += `<td>${fmt(c)}</td>`);
   const grand = colTotals.reduce((s,c)=>s+c,0);
-  html += `<td>${+grand.toFixed(2)}</td></tr></tbody>`;
+  html += `<td>${fmt(grand)}</td></tr></tbody>`;
   tbl.innerHTML = html;
 }
 
@@ -2227,7 +2238,7 @@ function renderMonthly() {
     stylesMap[r.styleId].count += r.count;
     stylesMap[r.styleId].subScore += r.score;
   });
-  totalScore = +totalScore.toFixed(2);
+  totalScore = fmt(totalScore);
 
   // 打版数据：该美甲师作为打版师当月打版的款式
   const seenIds = new Set();
@@ -2239,13 +2250,13 @@ function renderMonthly() {
     return true;
   });
   const designCount = monthStyles.length;
-  const designScore = +monthStyles.reduce((s, st) => s + (st.score || 0), 0).toFixed(2);
+  const designScore = fmt(monthStyles.reduce((s, st) => s + (st.score || 0), 0));
   // 当月总积分 = 当月做款积分 + 打版合计积分 × 2
-  const grandTotalScore = +(totalScore + designScore * 2).toFixed(2);
+  const grandTotalScore = fmt(totalScore + designScore * 2);
 
   // 汇总信息
   document.getElementById('monthly-summary').textContent =
-    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${grandTotalScore.toFixed(2)} 分 · 打版 ${designCount} 款`;
+    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${fmt(grandTotalScore)} 分 · 打版 ${designCount} 款`;
 
   // 信息卡片
   let html = `
@@ -2265,7 +2276,7 @@ function renderMonthly() {
           </div>
           <div>
             <div style="font-size:13px;opacity:0.85;">当月做款积分</div>
-            <div style="font-size:24px;font-weight:700;">${totalScore.toFixed(2)} 分</div>
+            <div style="font-size:24px;font-weight:700;">${fmt(totalScore)} 分</div>
           </div>
         </div>
         <div style="display:flex;gap:24px;flex-wrap:wrap;">
@@ -2275,12 +2286,12 @@ function renderMonthly() {
           </div>
           <div>
             <div style="font-size:13px;opacity:0.85;">打版合计积分</div>
-            <div style="font-size:24px;font-weight:700;">${designScore.toFixed(2)} 分</div>
+            <div style="font-size:24px;font-weight:700;">${fmt(designScore)} 分</div>
           </div>
         </div>
         <div style="background:rgba(255,215,0,0.95);color:var(--primary-dark);padding:10px 16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);align-self:flex-start;">
           <div style="font-size:13px;opacity:0.9;font-weight:600;">⭐ 当月总积分</div>
-          <div style="font-size:26px;font-weight:800;color:var(--primary-dark);">${grandTotalScore.toFixed(2)} 分</div>
+          <div style="font-size:26px;font-weight:800;color:var(--primary-dark);">${fmt(grandTotalScore)} 分</div>
         </div>
       </div>
     </div>
@@ -2298,12 +2309,12 @@ function renderMonthly() {
     styleList.forEach(s => {
       html += `<tr>
         <td>${s.name}</td>
-        <td>${(s.score || 0).toFixed(2)}</td>
+        <td>${fmt(s.score || 0)}</td>
         <td>${s.count}</td>
-        <td>${s.subScore.toFixed(2)}</td>
+        <td>${fmt(s.subScore)}</td>
       </tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${totalCount} 副</td><td>${totalScore.toFixed(2)}</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${totalCount} 副</td><td>${fmt(totalScore)}</td></tr>`;
     html += `</tbody></table></div>`;
   }
   html += `</div>`;
@@ -2320,7 +2331,7 @@ function renderMonthly() {
       html += `<tr>
         <td>${s.name}</td>
         <td>${s.createDate || '-'}</td>
-        <td>${(s.score || 0).toFixed(2)}</td>
+        <td>${fmt(s.score || 0)}</td>
       </tr>`;
     });
     html += `<tr class="total-row"><td>合计</td><td>-</td><td>${designCount} 款</td></tr>`;
@@ -2398,7 +2409,7 @@ function buildDesignerStatHTML(value, month) {
         </div>
         <div>
           <div style="font-size:13px;opacity:0.85;">当月合计积分</div>
-          <div style="font-size:24px;font-weight:700;">${totalScore.toFixed(2)} 分</div>
+          <div style="font-size:24px;font-weight:700;">${fmt(totalScore)} 分</div>
         </div>
       </div>
     </div>
@@ -2416,7 +2427,7 @@ function buildDesignerStatHTML(value, month) {
       html += `<tr>
         <td>${s.name}</td>
         <td>${s.createDate || '-'}</td>
-        <td>${(s.score || 0).toFixed(2)}</td>
+        <td>${fmt(s.score || 0)}</td>
       </tr>`;
     });
     html += `<tr class="total-row"><td>合计</td><td>-</td><td>${totalCount} 款</td></tr>`;
@@ -2463,7 +2474,7 @@ function renderDesignerStat() {
   const totalCount = monthStyles.length;
   const totalScore = monthStyles.reduce((s, st) => s + (st.score || 0), 0);
   document.getElementById('designerstat-summary').textContent =
-    `${monthName} · ${info.name}（${info.type}） · ${totalCount} 款 · ${totalScore.toFixed(2)} 分`;
+    `${monthName} · ${info.name}（${info.type}） · ${totalCount} 款 · ${fmt(totalScore)} 分`;
 
   document.getElementById('designerstat-download-bar').style.display = 'block';
 }
@@ -2502,7 +2513,7 @@ function exportDesignerStatExcel() {
     ['打版统计表'],
     [],
     ['姓名', '身份', '统计月份', '打版数量', '合计积分'],
-    [info.name, info.type, monthName, monthStyles.length, +monthStyles.reduce((s, st) => s + (st.score || 0), 0).toFixed(2)]
+    [info.name, info.type, monthName, monthStyles.length, fmt(monthStyles.reduce((s, st) => s + (st.score || 0), 0))]
   ];
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
   wsSummary['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 12 }];
@@ -2511,7 +2522,7 @@ function exportDesignerStatExcel() {
   // 明细表
   const detailRows = [['序号', '款式名称', '打版日期', '积分']];
   monthStyles.forEach((s, i) => {
-    detailRows.push([i + 1, s.name, s.createDate || '-', +(s.score || 0).toFixed(2)]);
+    detailRows.push([i + 1, s.name, s.createDate || '-', fmt(s.score || 0)]);
   });
   detailRows.push(['', '合计', '', `${monthStyles.length} 款`]);
   const wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
@@ -2546,7 +2557,7 @@ function exportAllDesignerStatExcel() {
     const result = getDesignerStatData(p.value, month);
     if (!result) return;
     const { info, monthStyles } = result;
-    const totalScore = +monthStyles.reduce((s, st) => s + (st.score || 0), 0).toFixed(2);
+    const totalScore = fmt(monthStyles.reduce((s, st) => s + (st.score || 0), 0));
     summaryRows.push([i + 1, info.name, info.type, monthStyles.length, totalScore]);
     if (monthStyles.length) hasData = true;
   });
@@ -2570,7 +2581,7 @@ function exportAllDesignerStatExcel() {
     }
     const rows = [['款式名称', '打版日期', '积分']];
     monthStyles.forEach(s => {
-      rows.push([s.name, s.createDate || '-', +(s.score || 0).toFixed(2)]);
+      rows.push([s.name, s.createDate || '-', fmt(s.score || 0)]);
     });
     rows.push(['合计', '', `${monthStyles.length} 款`]);
     const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -2592,13 +2603,13 @@ function buildDailyHTML(artistId, date) {
   // 当天记录
   const dayRecs = DB.records.filter(r => r.artistId === artistId && r.date === date);
   const dayCount = dayRecs.reduce((s,r) => s+r.count, 0);
-  const dayScore = +dayRecs.reduce((s,r) => s+r.score, 0).toFixed(2);
+  const dayScore = fmt(dayRecs.reduce((s,r) => s+r.score, 0));
 
   // 本月累计（按日期的年月）
   const month = date.substring(0, 7);
   const monthRecs = DB.records.filter(r => r.artistId === artistId && r.date.substring(0,7) === month);
   const monthCount = monthRecs.reduce((s,r) => s+r.count, 0);
-  const monthScore = +monthRecs.reduce((s,r) => s+r.score, 0).toFixed(2);
+  const monthScore = fmt(monthRecs.reduce((s,r) => s+r.score, 0));
 
   // 格式化日期显示 2026.7.26
   const [y,m,d] = date.split('-').map(n => parseInt(n));
@@ -2612,7 +2623,7 @@ function buildDailyHTML(artistId, date) {
       styleSummary[r.styleId] = { name: s ? s.name : '已删除款式', count: 0, score: 0 };
     }
     styleSummary[r.styleId].count += r.count;
-    styleSummary[r.styleId].score = +(styleSummary[r.styleId].score + r.score).toFixed(2);
+    styleSummary[r.styleId].score = fmt(styleSummary[r.styleId].score + r.score);
   });
 
   // 头像
@@ -2631,11 +2642,11 @@ function buildDailyHTML(artistId, date) {
       <div style="display:flex;gap:24px;flex-wrap:wrap;">
         <div>
           <div style="font-size:13px;opacity:0.85;">当日质检合格数</div>
-          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${dayScore.toFixed(2)} 分</div>
+          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${fmt(dayScore)} 分</div>
         </div>
         <div>
           <div style="font-size:13px;opacity:0.85;">本月累计积分</div>
-          <div style="font-size:24px;font-weight:700;">${monthScore.toFixed(2)} 分</div>
+          <div style="font-size:24px;font-weight:700;">${fmt(monthScore)} 分</div>
           <div style="font-size:12px;opacity:0.7;">（本月共 ${monthCount} 幅）</div>
         </div>
       </div>
@@ -2653,9 +2664,9 @@ function buildDailyHTML(artistId, date) {
     html += `<div class="table-wrap"><table>
       <thead><tr><th>款式</th><th>副数</th><th>积分</th></tr></thead><tbody>`;
     styleList.forEach(s => {
-      html += `<tr><td>${s.name}</td><td>${s.count}</td><td>${s.score.toFixed(2)}</td></tr>`;
+      html += `<tr><td>${s.name}</td><td>${s.count}</td><td>${fmt(s.score)}</td></tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>${dayCount}</td><td>${dayScore.toFixed(2)}</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>${dayCount}</td><td>${fmt(dayScore)}</td></tr>`;
     html += `</tbody></table></div>`;
   }
   html += `</div>`;
@@ -2665,7 +2676,7 @@ function buildDailyHTML(artistId, date) {
   monthRecs.forEach(r => {
     if (!dayMap[r.date]) dayMap[r.date] = { count: 0, score: 0 };
     dayMap[r.date].count += r.count;
-    dayMap[r.date].score = +(dayMap[r.date].score + r.score).toFixed(2);
+    dayMap[r.date].score = fmt(dayMap[r.date].score + r.score);
   });
   const dayKeys = Object.keys(dayMap).sort();
   if (dayKeys.length > 1) {
@@ -2679,10 +2690,10 @@ function buildDailyHTML(artistId, date) {
       html += `<tr ${isToday ? 'style="background:var(--primary-light);font-weight:600;"' : ''}>
         <td>${yy}.${mm}.${dd}${isToday ? ' （今天）' : ''}</td>
         <td>${dayMap[k].count}</td>
-        <td>${dayMap[k].score.toFixed(2)}</td>
+        <td>${fmt(dayMap[k].score)}</td>
       </tr>`;
     });
-    html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${monthScore.toFixed(2)}</td></tr>`;
+    html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${fmt(monthScore)}</td></tr>`;
     html += `</tbody></table></div></div>`;
   }
 
