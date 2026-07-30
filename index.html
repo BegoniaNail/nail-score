@@ -718,7 +718,9 @@
       <h2>👠 打版统计</h2>
       <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">按月查看每位打版师的打版数量、对应款式及积分</p>
       <div class="filter-bar">
-        <label style="font-size:13px">选择月份：</label>
+        <label style="font-size:13px">打版师：</label>
+        <select id="designerstat-designer"></select>
+        <label style="font-size:13px">月份：</label>
         <input type="month" id="designerstat-month">
         <button class="btn btn-primary btn-sm" onclick="renderDesignerStat()">查看</button>
         <button class="btn btn-sm" style="background:#eee" onclick="prevDesignerMonth()">◀ 上月</button>
@@ -1540,6 +1542,14 @@ function fillSelects() {
   const curDA = dA.value;
   dA.innerHTML = DB.artists.length ? DB.artists.map(a => `<option value="${a.id}">${a.name}</option>`).join('') : '<option value="">请先添加美甲师</option>';
   if (curDA) dA.value = curDA;
+
+  // 打版统计打版师下拉
+  const dsD = document.getElementById('designerstat-designer');
+  if (dsD) {
+    const curDsD = dsD.value;
+    dsD.innerHTML = '<option value="">请选择打版师</option>' + DB.designers.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    if (curDsD) dsD.value = curDsD;
+  }
   const fS = document.getElementById('filter-style');
   const curS = fS.value;
   fS.innerHTML = '<option value="">全部款式</option>' + DB.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
@@ -1927,87 +1937,81 @@ function nextDesignerMonth() {
 function renderDesignerStat() {
   const month = document.getElementById('designerstat-month').value || currentMonthStr();
   document.getElementById('designerstat-month').value = month;
-  const sm = styleMap();
+  const designerId = document.getElementById('designerstat-designer').value;
+  const container = document.getElementById('designerstat-content');
+  const [y,m] = month.split('-');
+  const monthName = `${y}年${parseInt(m)}月`;
 
-  // 筛选当月有打版师关联的款式（按款式 id 去重，避免重复计数）
+  if (!designerId) {
+    container.innerHTML = `<div class="empty">请选择打版师</div>`;
+    document.getElementById('designerstat-summary').textContent = '';
+    return;
+  }
+
+  const designer = DB.designers.find(d => d.id === designerId);
+  if (!designer) {
+    container.innerHTML = `<div class="empty">打版师不存在</div>`;
+    return;
+  }
+
+  // 筛选该打版师当月的款式（按 id 去重）
   const seenIds = new Set();
   const monthStyles = DB.styles.filter(s => {
-    if (!s.designer) return false;
+    if (s.designer !== designer.name) return false;
     if ((s.createDate || '').substring(0, 7) !== month) return false;
     if (seenIds.has(s.id)) return false;
     seenIds.add(s.id);
     return true;
   });
 
-  // 按打版师汇总
-  const designerData = {};
-  DB.designers.forEach(d => {
-    designerData[d.id] = { name: d.name, designer: d, totalCount: 0, totalScore: 0, styles: {} };
-  });
-  monthStyles.forEach(s => {
-    const d = DB.designers.find(x => x.name === s.designer);
-    if (!d || !designerData[d.id]) return;
-    const dd = designerData[d.id];
-    dd.totalCount += 1; // 打版数量 = 款式数
-    dd.totalScore += (s.score || 0);
-    dd.styles[s.id] = { name: s.name, score: s.score || 0, createDate: s.createDate || '' };
-  });
+  const totalCount = monthStyles.length;
+  const totalScore = monthStyles.reduce((s, st) => s + (st.score || 0), 0);
 
-  // 按打版数量排序
-  const ranked = Object.values(designerData)
-    .filter(d => d.totalCount > 0)
-    .sort((a,b) => b.totalCount - a.totalCount || b.totalScore - a.totalScore);
-
-  const [y,m] = month.split('-');
-  const monthName = `${y}年${parseInt(m)}月`;
-
-  // 汇总
-  const grandCount = ranked.reduce((s,d) => s+d.totalCount, 0);
-  const grandScore = ranked.reduce((s,d) => s+d.totalScore, 0);
   document.getElementById('designerstat-summary').textContent =
-    ranked.length ? `${monthName} · 共 ${ranked.length} 位打版师 · ${grandCount} 个款式 · ${grandScore.toFixed(2)} 分` : `${monthName} · 暂无数据`;
+    `${monthName} · ${designer.name} · ${totalCount} 款 · ${totalScore.toFixed(2)} 分`;
 
-  const container = document.getElementById('designerstat-content');
-  if (!ranked.length) {
-    container.innerHTML = `<div class="empty">${monthName} 暂无打版记录</div>`;
+  if (!monthStyles.length) {
+    container.innerHTML = `<div class="empty">${monthName} ${designer.name} 暂无打版记录</div>`;
     return;
   }
 
-  // 顶部概览卡片
-  let cardsHtml = '<div class="stat-grid" style="margin-bottom:16px;">';
-  ranked.slice(0,3).forEach((d,i) => {
-    const medal = i===0 ? '🥇' : i===1 ? '🥈' : '🥉';
-    cardsHtml += `<div class="stat-card"><div class="num" style="font-size:22px;">${medal}</div><div style="margin:6px 0;">${avatarHTML(d.designer, 'avatar-lg')}</div><div style="font-weight:600;margin:4px 0;">${d.name}</div><div class="num" style="font-size:22px;color:var(--primary);">${d.totalCount}</div><div class="label">款式 · ${d.totalScore.toFixed(1)}分</div></div>`;
-  });
-  cardsHtml += '</div>';
-
-  // 每个打版师独立的当月表格
-  let html = cardsHtml;
-  ranked.forEach((d, i) => {
-    const rank = i + 1;
-    const medal = rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : `<span class="rank-badge">${rank}</span>`;
-    html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-        <div style="font-size:20px;">${medal}</div>
-        ${avatarHTML(d.designer, 'avatar-sm')}
-        <div style="font-weight:600;font-size:16px;">${d.name}</div>
-        <div style="margin-left:auto;font-size:13px;color:var(--text-light);">
-          打版 <strong style="color:var(--primary);">${d.totalCount}</strong> 款 · 合计 <strong style="color:var(--primary);">${d.totalScore.toFixed(2)}</strong> 分
+  // 打版师信息卡片
+  let html = `
+    <div style="background:linear-gradient(135deg, var(--primary), var(--primary-dark));border-radius:var(--radius);padding:24px;color:white;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        ${avatarHTML(designer, 'avatar-lg')}
+        <div>
+          <div style="font-size:24px;font-weight:700;">${designer.name}</div>
+          <div style="font-size:16px;opacity:0.95;font-weight:600;">时间：${monthName}</div>
         </div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th style="width:50%;">款式名称</th><th style="width:25%;">打版日期</th><th style="width:25%;">打版数量</th></tr></thead><tbody>`;
-    const styles = Object.values(d.styles);
-    styles.forEach(s => {
-      html += `<tr>
-        <td>${s.name}</td>
-        <td>${s.createDate || '-'}</td>
-        <td>1</td>
-      </tr>`;
-    });
-    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${d.totalCount}</td></tr>`;
-    html += `</tbody></table></div></div>`;
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px;opacity:0.85;">当月打版数量</div>
+          <div style="font-size:24px;font-weight:700;">${totalCount} 款</div>
+        </div>
+        <div>
+          <div style="font-size:13px;opacity:0.85;">当月合计积分</div>
+          <div style="font-size:24px;font-weight:700;">${totalScore.toFixed(2)} 分</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 款式明细表
+  html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);">
+    <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">当月打版款式明细</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th style="width:50%;">款式名称</th><th style="width:25%;">打版日期</th><th style="width:25%;">积分</th></tr></thead><tbody>`;
+  monthStyles.forEach(s => {
+    html += `<tr>
+      <td>${s.name}</td>
+      <td>${s.createDate || '-'}</td>
+      <td>${(s.score || 0).toFixed(2)}</td>
+    </tr>`;
   });
+  html += `<tr class="total-row"><td>合计</td><td>-</td><td>${totalCount} 款</td></tr>`;
+  html += `</tbody></table></div></div>`;
 
   container.innerHTML = html;
 }
