@@ -503,7 +503,7 @@
         </div>
         <div class="form-group">
           <label>打版师</label>
-          <select id="style-designer"><option value="">请先添加打版师</option></select>
+          <select id="style-designer"><option value="">请先添加打版师或美甲师</option></select>
         </div>
         <div class="form-group">
           <label>打版日期</label>
@@ -1564,17 +1564,21 @@ function fillSelects() {
   else renderStyleRows();
   updatePreview();
 
-  // 打版师下拉（款式管理添加/编辑）
-  const dOpts = DB.designers.length
-    ? DB.designers.map(d => `<option value="${d.name}">${d.name}</option>`).join('')
-    : '<option value="">请先添加打版师</option>';
+  // 打版师/美甲师下拉（款式管理添加/编辑）
+  const allPeople = [
+    ...DB.designers.map(d => ({ name: d.name, type: '打版师' })),
+    ...DB.artists.map(a => ({ name: a.name, type: '美甲师' }))
+  ];
+  const dOpts = allPeople.length
+    ? allPeople.map(p => `<option value="${p.name}">${p.name}（${p.type}）</option>`).join('')
+    : '<option value="">请先添加打版师或美甲师</option>';
   const sd = document.getElementById('style-designer');
   const curSD = sd.value;
   sd.innerHTML = dOpts;
   if (curSD) sd.value = curSD;
   const esd = document.getElementById('edit-style-designer');
   const curESD = esd.value;
-  esd.innerHTML = '<option value="">无</option>' + (DB.designers.length ? DB.designers.map(d => `<option value="${d.name}">${d.name}</option>`).join('') : '');
+  esd.innerHTML = '<option value="">无</option>' + (allPeople.length ? allPeople.map(p => `<option value="${p.name}">${p.name}（${p.type}）</option>`).join('') : '');
   if (curESD) esd.value = curESD;
 }
 function updatePreview() {
