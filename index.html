@@ -2267,9 +2267,6 @@ function renderMonthly() {
     stylesMap[r.styleId].count += r.count;
     stylesMap[r.styleId].subScore += r.score;
   });
-  // 汇总信息
-  document.getElementById('monthly-summary').textContent =
-    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${fmt(grandTotalScoreRaw)} 分 · 打版 ${designCount} 款`;
 
   // 打版数据：该美甲师作为打版师当月打版的款式
   const seenIds = new Set();
