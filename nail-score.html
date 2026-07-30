@@ -316,12 +316,12 @@
       <div class="tabs">
         <div class="nav-group">
           <div class="nav-group-title">查询系统</div>
-          <button class="tab" data-tab="daily">📊 每日统计</button>
+          <button class="tab active" data-tab="daily">📊 每日统计</button>
           <button class="tab" data-tab="detail">📋 明细记录</button>
         </div>
         <div class="nav-group">
           <div class="nav-group-title">录入系统</div>
-          <button class="tab active" data-tab="record">📝 计分录入</button>
+          <button class="tab" data-tab="record">📝 计分录入</button>
           <button class="tab" data-tab="styles">🎨 款式管理</button>
           <button class="tab" data-tab="artists">👤 美甲师管理</button>
         </div>
@@ -337,7 +337,7 @@
     <main class="content-area">
 
   <!-- 计分录入 -->
-  <div class="panel active" id="panel-record">
+  <div class="panel" id="panel-record">
     <div class="card">
       <h2>新增计分记录</h2>
       <div class="form-row">
@@ -463,7 +463,7 @@
   </div>
 
   <!-- 每日统计 -->
-  <div class="panel" id="panel-daily">
+  <div class="panel active" id="panel-daily">
     <div class="card">
       <h2>📊 每日统计</h2>
       <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">美甲师查看自己当天的副数、积分及本月累计</p>
@@ -1404,6 +1404,11 @@ document.getElementById('rec-date').value = todayStr();
 document.getElementById('monthly-month').value = currentMonthStr();
 document.getElementById('daily-date').value = todayStr();
 renderAll();
+// 默认选中第一位美甲师并渲染每日统计
+if (DB.artists.length) {
+  document.getElementById('daily-artist').value = DB.artists[0].id;
+  renderDaily();
+}
 // 异步从云端拉取最新数据（覆盖本地）
 pullCloud().then(ok => {
   if (ok) {
@@ -1414,6 +1419,11 @@ pullCloud().then(ok => {
       pushCloud();
       renderAll();
     }
+    // 云端拉取后，确保每日统计默认选中第一位美甲师
+    if (DB.artists.length && !document.getElementById('daily-artist').value) {
+      document.getElementById('daily-artist').value = DB.artists[0].id;
+    }
+    renderDaily();
   }
 });
 // 每60秒自动同步一次
