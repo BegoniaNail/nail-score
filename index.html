@@ -612,7 +612,8 @@
       </div>
       <div id="daily-content"></div>
       <div id="daily-download-bar" style="text-align:center;margin-top:16px;display:none;">
-        <button class="btn btn-primary" onclick="downloadDailyImage()">📥 下载统计图片</button>
+        <button class="btn btn-primary" onclick="downloadDailyImage()">📥 下载当前美甲师</button>
+        <button class="btn btn-primary" onclick="downloadAllDailyImages()" style="margin-left:8px;">📥 下载全部美甲师</button>
       </div>
     </div>
   </div>
@@ -1733,23 +1734,9 @@ function renderMonthly() {
 }
 
 // ===== 每日统计 =====
-function renderDaily() {
-  const artistId = document.getElementById('daily-artist').value;
-  const date = document.getElementById('daily-date').value || todayStr();
-  document.getElementById('daily-date').value = date;
-  const container = document.getElementById('daily-content');
-
-  if (!artistId) {
-    container.innerHTML = `<div class="empty">请选择美甲师</div>`;
-    document.getElementById('daily-download-bar').style.display = 'none';
-    return;
-  }
+function buildDailyHTML(artistId, date) {
   const artist = DB.artists.find(a => a.id === artistId);
-  if (!artist) {
-    container.innerHTML = `<div class="empty">美甲师不存在</div>`;
-    document.getElementById('daily-download-bar').style.display = 'none';
-    return;
-  }
+  if (!artist) return '';
   const sm = styleMap();
 
   // 当天记录
@@ -1854,26 +1841,50 @@ function renderDaily() {
     html += `</tbody></table></div></div>`;
   }
 
-  container.innerHTML = html;
-  // 有数据时显示下载按钮
-  document.getElementById('daily-download-bar').style.display = dayRecs.length ? 'block' : 'none';
+  return html;
 }
 
-// 下载每日统计图片
+function renderDaily() {
+  const artistId = document.getElementById('daily-artist').value;
+  const date = document.getElementById('daily-date').value || todayStr();
+  document.getElementById('daily-date').value = date;
+  const container = document.getElementById('daily-content');
+
+  if (!artistId) {
+    container.innerHTML = `<div class="empty">请选择美甲师</div>`;
+    document.getElementById('daily-download-bar').style.display = 'none';
+    return;
+  }
+  const artist = DB.artists.find(a => a.id === artistId);
+  if (!artist) {
+    container.innerHTML = `<div class="empty">美甲师不存在</div>`;
+    document.getElementById('daily-download-bar').style.display = 'none';
+    return;
+  }
+
+  container.innerHTML = buildDailyHTML(artistId, date);
+
+  // 当天是否有数据
+  const dayRecs = DB.records.filter(r => r.artistId === artistId && r.date === date);
+  document.getElementById('daily-download-bar').style.display = 'block';
+}
+
+// 下载每日统计图片（当前美甲师）
 function downloadDailyImage() {
   const target = document.getElementById('daily-content');
   if (!target) return;
+  const artistId = document.getElementById('daily-artist').value;
+  if (!artistId) return toast('请先选择美甲师');
   toast('正在生成图片…');
   html2canvas(target, {
     scale: 2,
     backgroundColor: '#f8f3f3',
     useCORS: true
   }).then(function(canvas) {
-    const artist = document.getElementById('daily-artist');
-    const artistName = artist ? artist.options[artist.selectedIndex].text : '美甲师';
+    const artist = DB.artists.find(a => a.id === artistId);
+    const artistName = artist ? artist.name : '美甲师';
     const date = document.getElementById('daily-date').value || todayStr();
     const filename = `每日统计_${artistName}_${date}.png`;
-    // 手机端用 blob 下载，兼容性更好
     canvas.toBlob(function(blob) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1889,6 +1900,62 @@ function downloadDailyImage() {
     console.error(err);
     toast('生成图片失败，请重试');
   });
+}
+
+// 下载所有美甲师的每日统计图片
+function downloadAllDailyImages() {
+  if (!DB.artists.length) return toast('暂无美甲师');
+  const date = document.getElementById('daily-date').value || todayStr();
+  const container = document.getElementById('daily-content');
+  const artists = DB.artists;
+  let idx = 0;
+
+  toast(`正在生成 1/${artists.length}…`);
+
+  // 逐个美甲师：渲染 → 截图 → 下载 → 下一个
+  function next() {
+    if (idx >= artists.length) {
+      // 恢复原来选中的美甲师显示
+      const curId = document.getElementById('daily-artist').value;
+      container.innerHTML = buildDailyHTML(curId, date);
+      toast('全部下载完成');
+      return;
+    }
+    const artist = artists[idx];
+    // 渲染当前美甲师的统计
+    container.innerHTML = buildDailyHTML(artist.id, date);
+    toast(`正在生成 ${idx + 1}/${artists.length}：${artist.name}…`);
+
+    // 等待 DOM 渲染完成后截图
+    setTimeout(function() {
+      html2canvas(container, {
+        scale: 2,
+        backgroundColor: '#f8f3f3',
+        useCORS: true
+      }).then(function(canvas) {
+        const filename = `每日统计_${artist.name}_${date}.png`;
+        canvas.toBlob(function(blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 500);
+          idx++;
+          // 间隔一小段时间再下一个，避免浏览器拦截多文件下载
+          setTimeout(next, 600);
+        }, 'image/png');
+      }).catch(function(err) {
+        console.error(err);
+        toast(`生成 ${artist.name} 图片失败，跳过`);
+        idx++;
+        setTimeout(next, 600);
+      });
+    }, 200);
+  }
+  next();
 }
 function renderStyleScore() {
   const el = document.getElementById('stylescore-list');
