@@ -525,7 +525,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>款式名称</th><th>每副积分</th><th>打版日期</th><th>已做副数</th><th>累计积分</th></tr></thead>
+          <thead><tr><th>款式名称</th><th>每副积分</th><th>打版日期</th></tr></thead>
           <tbody id="stylescore-list"></tbody>
         </table>
       </div>
@@ -1427,25 +1427,19 @@ function renderDaily() {
 function renderStyleScore() {
   const el = document.getElementById('stylescore-list');
   if (!DB.styles.length) {
-    el.innerHTML = `<tr><td colspan="5" class="empty">暂无款式，请先在"款式管理"中添加</td></tr>`;
+    el.innerHTML = `<tr><td colspan="3" class="empty">暂无款式，请先在"款式管理"中添加</td></tr>`;
     document.getElementById('stylescore-summary').textContent = '';
     return;
   }
   const keyword = (document.getElementById('stylescore-search').value || '').trim().toLowerCase();
   const sort = document.getElementById('stylescore-sort').value;
 
-  // 统计每个款式的已做副数和累计积分
-  let data = DB.styles.map(s => {
-    const recs = DB.records.filter(r => r.styleId === s.id);
-    return {
-      id: s.id,
-      name: s.name,
-      score: s.score,
-      createDate: s.createDate || '',
-      count: recs.reduce((sum, r) => sum + r.count, 0),
-      totalScore: recs.reduce((sum, r) => sum + r.score, 0)
-    };
-  });
+  let data = DB.styles.map(s => ({
+    id: s.id,
+    name: s.name,
+    score: s.score,
+    createDate: s.createDate || ''
+  }));
 
   // 搜索筛选
   if (keyword) data = data.filter(s => s.name.toLowerCase().includes(keyword));
@@ -1460,19 +1454,13 @@ function renderStyleScore() {
   });
 
   // 汇总
-  const totalStyles = data.length;
-  const totalCount = data.reduce((s, x) => s + x.count, 0);
-  const totalScore = data.reduce((s, x) => s + x.totalScore, 0);
-  document.getElementById('stylescore-summary').textContent =
-    `共 ${totalStyles} 个款式 · ${totalCount} 副 · ${totalScore.toFixed(2)} 分`;
+  document.getElementById('stylescore-summary').textContent = `共 ${data.length} 个款式`;
 
   el.innerHTML = data.map(s => `
     <tr>
       <td><span class="badge">${s.name}</span></td>
       <td><strong style="color:var(--primary);">${s.score}</strong></td>
       <td>${s.createDate || '-'}</td>
-      <td>${s.count}</td>
-      <td>${s.totalScore.toFixed(2)}</td>
     </tr>
   `).join('');
 }
