@@ -343,7 +343,10 @@
 </div>
 
 <div class="container">
-  <div style="text-align:right;font-size:12px;margin-bottom:8px;" id="sync-status">🔄 同步中…</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+    <div id="login-status"></div>
+    <div id="sync-status">🔄 同步中…</div>
+  </div>
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-title">功能菜单</div>
@@ -371,6 +374,12 @@
             <button class="tab" data-tab="period">📅 时段统计</button>
             <button class="tab" data-tab="monthly">📆 月度统计</button>
             <button class="tab" data-tab="cross">🔀 交叉统计</button>
+          </div>
+        </div>
+        <div class="nav-group collapsed" data-group="admin" id="admin-group" style="display:none;">
+          <div class="nav-group-title" onclick="toggleGroup(this)">管理系统 <span class="arrow">▼</span></div>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="admin">🔐 管理员设置</button>
           </div>
         </div>
       </div>
@@ -625,8 +634,91 @@
       </div>
     </div>
   </div>
+
+  <!-- 管理员设置 -->
+  <div class="panel" id="panel-admin">
+    <div class="card">
+      <h2>🔐 管理员设置</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">添加、编辑、删除管理员。主管理员拥有全部权限。</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>管理员名称</label>
+          <input type="text" id="admin-name" placeholder="如：店长小美">
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <input type="text" id="admin-password" placeholder="设置密码">
+        </div>
+        <button class="btn btn-primary" onclick="addAdmin()">+ 添加管理员</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>管理员列表</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>名称</th><th>身份</th><th>操作</th></tr></thead>
+          <tbody id="admin-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   </main>
   </div><!-- /.layout -->
+</div>
+
+<!-- 登录弹窗 -->
+<div class="modal-mask" id="modal-login">
+  <div class="modal">
+    <h3>🔐 管理员登录</h3>
+    <div class="form-group">
+      <label>管理员名称</label>
+      <input type="text" id="login-name" placeholder="请输入名称">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="login-password" placeholder="请输入密码">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-login')">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="doLogin()">登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- 密码确认弹窗 -->
+<div class="modal-mask" id="modal-confirm">
+  <div class="modal">
+    <h3>🔒 安全验证</h3>
+    <p id="confirm-msg" style="font-size:13px;color:var(--text-light);margin-bottom:14px;">请输入管理员密码以确认操作</p>
+    <div class="form-group">
+      <label>管理员密码</label>
+      <input type="password" id="confirm-password" placeholder="请输入密码">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-confirm')">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="doConfirm()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑管理员弹窗 -->
+<div class="modal-mask" id="modal-admin">
+  <div class="modal">
+    <h3>编辑管理员</h3>
+    <div class="form-group">
+      <label>管理员名称</label>
+      <input type="text" id="edit-admin-name">
+    </div>
+    <div class="form-group">
+      <label>新密码（留空则不修改）</label>
+      <input type="password" id="edit-admin-password" placeholder="输入新密码">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-admin')">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="saveAdminEdit()">保存</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -681,7 +773,7 @@
 const KEY = 'nailScoreData_v1';
 const BIN_ID = '019fafca-3462-704c-9eed-3db463b6f5e1';
 const API = 'https://jsonblob.com/api/jsonBlob/' + BIN_ID;
-let DB = { styles: [], artists: [], records: [] };
+let DB = { styles: [], artists: [], records: [], admins: [] };
 let SYNCING = false;
 
 function loadLocal() {
@@ -692,6 +784,7 @@ function loadLocal() {
   if (!DB.styles) DB.styles = [];
   if (!DB.artists) DB.artists = [];
   if (!DB.records) DB.records = [];
+  if (!DB.admins) DB.admins = [];
 }
 function saveLocal() { localStorage.setItem(KEY, JSON.stringify(DB)); }
 
@@ -753,8 +846,169 @@ function setSync(state) {
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
+// ===== 权限管理 =====
+const SESSION_KEY = 'nailAdminSession';
+let confirmCallback = null; // 密码确认回调
+let pendingTab = null; // 待切换的tab（登录后恢复）
+
+function getSession() {
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch(e) { return null; }
+}
+function setSession(s) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
+
+function isLoggedIn() { return !!getSession(); }
+function isMaster() { const s = getSession(); return s && s.isMaster; }
+function currentAdmin() { return getSession(); }
+
+function updateLoginStatus() {
+  const el = document.getElementById('login-status');
+  const adminGroup = document.getElementById('admin-group');
+  const s = getSession();
+  if (s) {
+    const role = s.isMaster ? '主管理员' : '管理员';
+    el.innerHTML = `<span style="color:var(--primary-dark);">👤 ${s.name}（${role}）</span> <button class="btn btn-sm" style="background:#eee;margin-left:6px;" onclick="doLogout()">退出</button>`;
+    // 主管理员才显示管理系统菜单
+    if (adminGroup) adminGroup.style.display = s.isMaster ? '' : 'none';
+  } else {
+    el.innerHTML = `<button class="btn btn-sm btn-primary" onclick="openLogin()">🔐 点击登录</button>`;
+    if (adminGroup) adminGroup.style.display = 'none';
+  }
+}
+
+function openLogin() {
+  document.getElementById('login-name').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('modal-login').classList.add('show');
+}
+function doLogin() {
+  const name = document.getElementById('login-name').value.trim();
+  const pwd = document.getElementById('login-password').value;
+  if (!name || !pwd) return toast('请输入名称和密码');
+  const admin = DB.admins.find(a => a.name === name && a.password === pwd);
+  if (!admin) return toast('名称或密码错误');
+  setSession({ id: admin.id, name: admin.name, isMaster: !!admin.isMaster, loginTime: Date.now() });
+  closeModal('modal-login');
+  toast('登录成功');
+  updateLoginStatus();
+  renderAll();
+  // 登录后恢复待切换的tab
+  if (pendingTab) {
+    const t = document.querySelector(`[data-tab="${pendingTab}"]`);
+    if (t) t.click();
+    pendingTab = null;
+  }
+}
+function doLogout() {
+  clearSession();
+  toast('已退出登录');
+  updateLoginStatus();
+  // 退到每日统计页
+  const t = document.querySelector('[data-tab="daily"]');
+  if (t) t.click();
+}
+
+// 需要登录的操作检查
+function requireLogin() {
+  if (isLoggedIn()) return true;
+  toast('请先登录管理员');
+  openLogin();
+  return false;
+}
+
+// 密码确认弹窗（用于删除操作）
+function requireConfirm(msg, callback) {
+  if (!isLoggedIn()) {
+    toast('请先登录管理员');
+    openLogin();
+    return;
+  }
+  confirmCallback = callback;
+  document.getElementById('confirm-msg').textContent = msg || '请输入管理员密码以确认操作';
+  document.getElementById('confirm-password').value = '';
+  document.getElementById('modal-confirm').classList.add('show');
+}
+function doConfirm() {
+  const pwd = document.getElementById('confirm-password').value;
+  const s = getSession();
+  if (!s) { closeModal('modal-confirm'); return; }
+  const admin = DB.admins.find(a => a.id === s.id);
+  if (!admin || admin.password !== pwd) return toast('密码错误');
+  closeModal('modal-confirm');
+  if (confirmCallback) { confirmCallback(); confirmCallback = null; }
+}
+
+// ===== 管理员 CRUD =====
+function addAdmin() {
+  if (!isMaster()) return toast('仅主管理员可操作');
+  const name = document.getElementById('admin-name').value.trim();
+  const pwd = document.getElementById('admin-password').value;
+  if (!name) return toast('请输入名称');
+  if (!pwd) return toast('请输入密码');
+  if (DB.admins.some(a => a.name === name)) return toast('名称已存在');
+  DB.admins.push({ id: uid(), name, password: pwd, isMaster: false });
+  save();
+  document.getElementById('admin-name').value = '';
+  document.getElementById('admin-password').value = '';
+  toast('管理员已添加');
+  renderAdmins();
+}
+function editAdmin(id) {
+  if (!isMaster()) return toast('仅主管理员可操作');
+  const a = DB.admins.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('edit-admin-name').value = a.name;
+  document.getElementById('edit-admin-password').value = '';
+  document.getElementById('modal-admin').dataset.id = id;
+  document.getElementById('modal-admin').classList.add('show');
+}
+function saveAdminEdit() {
+  const id = document.getElementById('modal-admin').dataset.id;
+  const a = DB.admins.find(x => x.id === id);
+  if (!a) return;
+  const name = document.getElementById('edit-admin-name').value.trim();
+  const pwd = document.getElementById('edit-admin-password').value;
+  if (!name) return toast('请输入名称');
+  if (DB.admins.some(x => x.id !== id && x.name === name)) return toast('名称已存在');
+  a.name = name;
+  if (pwd) a.password = pwd;
+  // 如果改的是自己，同步更新 session
+  const s = getSession();
+  if (s && s.id === id) { s.name = name; setSession(s); }
+  save(); closeModal('modal-admin');
+  toast('已保存');
+  updateLoginStatus();
+  renderAdmins();
+}
+function delAdmin(id) {
+  if (!isMaster()) return toast('仅主管理员可操作');
+  const s = getSession();
+  if (s && s.id === id) return toast('不能删除自己');
+  const a = DB.admins.find(x => x.id === id);
+  if (!a) return;
+  if (a.isMaster) return toast('不能删除主管理员');
+  requireConfirm(`确认删除管理员「${a.name}」？`, function() {
+    DB.admins = DB.admins.filter(x => x.id !== id);
+    save();
+    toast('已删除');
+    renderAdmins();
+  });
+}
+function renderAdmins() {
+  const el = document.getElementById('admin-list');
+  if (!DB.admins.length) { el.innerHTML = `<tr><td colspan="3" class="empty">暂无管理员</td></tr>`; return; }
+  el.innerHTML = DB.admins.map(a => {
+    const role = a.isMaster ? '<span class="badge" style="background:var(--primary);color:white;">主管理员</span>' : '<span class="badge">管理员</span>';
+    const actions = a.isMaster ? '-' : `
+      <button class="btn btn-sm btn-edit" onclick="editAdmin('${a.id}')">编辑</button>
+      <button class="btn btn-sm btn-danger" onclick="delAdmin('${a.id}')">删除</button>`;
+    return `<tr><td>${a.name}</td><td>${role}</td><td>${actions}</td></tr>`;
+  }).join('');
+}
+
 // ===== 款式 =====
 function addStyle() {
+  if (!requireLogin()) return;
   const name = document.getElementById('style-name').value.trim();
   const score = parseFloat(document.getElementById('style-score').value);
   const designer = document.getElementById('style-designer').value.trim();
@@ -772,6 +1026,7 @@ function addStyle() {
   renderAll();
 }
 function editStyle(id) {
+  if (!requireLogin()) return;
   const s = DB.styles.find(x => x.id === id);
   if (!s) return;
   document.getElementById('edit-style-name').value = s.name;
@@ -782,6 +1037,7 @@ function editStyle(id) {
   document.getElementById('modal-style').classList.add('show');
 }
 function saveStyleEdit() {
+  if (!requireLogin()) return;
   const id = document.getElementById('modal-style').dataset.id;
   const s = DB.styles.find(x => x.id === id);
   if (!s) return;
@@ -799,10 +1055,12 @@ function delStyle(id) {
   const s = DB.styles.find(x => x.id === id);
   if (!s) return;
   const used = DB.records.filter(r => r.styleId === id).length;
-  if (used > 0 && !confirm(`该款式已有 ${used} 条记录，删除后相关记录也会清除，确定？`)) return;
-  DB.styles = DB.styles.filter(x => x.id !== id);
-  DB.records = DB.records.filter(r => r.styleId !== id);
-  save(); toast('已删除'); renderAll();
+  const msg = used > 0 ? `确认删除款式「${s.name}」？该款式已有 ${used} 条记录，将一并删除。` : `确认删除款式「${s.name}」？`;
+  requireConfirm(msg, function() {
+    DB.styles = DB.styles.filter(x => x.id !== id);
+    DB.records = DB.records.filter(r => r.styleId !== id);
+    save(); toast('已删除'); renderAll();
+  });
 }
 
 // ===== 美甲师 =====
@@ -860,6 +1118,7 @@ function previewEditAvatar(input) {
 }
 
 function addArtist() {
+  if (!requireLogin()) return;
   const name = document.getElementById('artist-name').value.trim();
   if (!name) return toast('请输入姓名');
   if (DB.artists.some(a => a.name === name)) return toast('美甲师已存在');
@@ -870,6 +1129,7 @@ function addArtist() {
   toast('美甲师已添加'); renderAll();
 }
 function editArtist(id) {
+  if (!requireLogin()) return;
   const a = DB.artists.find(x => x.id === id);
   if (!a) return;
   document.getElementById('edit-artist-name').value = a.name;
@@ -880,6 +1140,7 @@ function editArtist(id) {
   document.getElementById('modal-artist').classList.add('show');
 }
 function saveArtistEdit() {
+  if (!requireLogin()) return;
   const id = document.getElementById('modal-artist').dataset.id;
   const a = DB.artists.find(x => x.id === id);
   if (!a) return;
@@ -892,11 +1153,15 @@ function saveArtistEdit() {
   toast('已保存'); renderAll();
 }
 function delArtist(id) {
+  const a = DB.artists.find(x => x.id === id);
+  if (!a) return;
   const used = DB.records.filter(r => r.artistId === id).length;
-  if (used > 0 && !confirm(`该美甲师有 ${used} 条记录，删除后相关记录也会清除，确定？`)) return;
-  DB.artists = DB.artists.filter(x => x.id !== id);
-  DB.records = DB.records.filter(r => r.artistId !== id);
-  save(); toast('已删除'); renderAll();
+  const msg = used > 0 ? `确认删除美甲师「${a.name}」？该美甲师有 ${used} 条记录，将一并删除。` : `确认删除美甲师「${a.name}」？`;
+  requireConfirm(msg, function() {
+    DB.artists = DB.artists.filter(x => x.id !== id);
+    DB.records = DB.records.filter(r => r.artistId !== id);
+    save(); toast('已删除'); renderAll();
+  });
 }
 
 // ===== 计分录入（支持多款式批量）=====
@@ -938,6 +1203,7 @@ function updateRowCount(i, val) {
 }
 
 function addRecord() {
+  if (!requireLogin()) return;
   const artistId = document.getElementById('rec-artist').value;
   let date = document.getElementById('rec-date').value;
   const note = document.getElementById('rec-note').value.trim();
@@ -970,8 +1236,10 @@ function addRecord() {
   renderAll();
 }
 function delRecord(id) {
-  DB.records = DB.records.filter(r => r.id !== id);
-  save(); toast('已删除'); renderAll();
+  requireConfirm('确认删除这条计分记录？', function() {
+    DB.records = DB.records.filter(r => r.id !== id);
+    save(); toast('已删除'); renderAll();
+  });
 }
 
 // ===== 渲染 =====
@@ -1491,6 +1759,8 @@ function renderAll() {
   fillSelects();
   renderStyles(); renderArtists(); renderRecordPanel();
   renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDaily(); renderStyleScore(); renderCross();
+  renderAdmins();
+  updateLoginStatus();
 }
 
 // 分组折叠
@@ -1512,6 +1782,19 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
   t.addEventListener('click', function(e) {
     e.preventDefault();
     const key = this.dataset.tab;
+    // 受保护页面：需登录才能访问
+    const protectedTabs = ['record', 'styles', 'artists'];
+    // 管理员设置页：仅主管理员
+    if (key === 'admin' && !isMaster()) {
+      toast('仅主管理员可访问');
+      return;
+    }
+    if (protectedTabs.includes(key) && !isLoggedIn()) {
+      toast('请先登录管理员');
+      pendingTab = key;
+      openLogin();
+      return;
+    }
     expandGroupOf(this); // 展开当前 tab 所在分组
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
@@ -1525,11 +1808,16 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     if (key === 'daily') renderDaily();
     if (key === 'stylescore') renderStyleScore();
     if (key === 'cross') renderCross();
+    if (key === 'admin') renderAdmins();
   });
 });
 
 // 预置示例数据（首次使用，仅写本地，由启动逻辑决定是否推云端）
 function seedIfEmpty() {
+  // 确保至少有一个主管理员
+  if (!DB.admins.length) {
+    DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
+  }
   if (DB.styles.length || DB.artists.length || DB.records.length) return;
   const s1 = { id: uid(), name: '款式A（纯色）', score: 1 };
   const s2 = { id: uid(), name: '款式B（渐变）', score: 1.2 };
