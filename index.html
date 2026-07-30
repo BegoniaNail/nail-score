@@ -409,7 +409,7 @@
 <div class="container">
   <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
     <div id="login-status"></div>
-    <div id="sync-status">🔄 同步中…</div>
+    <div id="sync-status">🔄 连接中…</div>
   </div>
   <div class="layout">
     <aside class="sidebar">
@@ -1067,11 +1067,14 @@ function mergeCloudData(cloudData) {
 // 拉取：公开仓库不需要 Token
 async function pullGitHub() {
   try {
-    setSync('syncing');
     const headers = { 'Accept': 'application/vnd.github.v3+json' };
     const token = getToken();
     if (token) headers['Authorization'] = `token ${token}`;
-    const res = await fetch(`${GH_API}?ref=${GH_BRANCH}&t=${Date.now()}`, { headers });
+    // 10 秒超时，避免长时间卡在「同步中」
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(`${GH_API}?ref=${GH_BRANCH}&t=${Date.now()}`, { headers, signal: controller.signal });
+    clearTimeout(timeout);
     if (res.status === 404) {
       // data.json 还不存在，需要创建
       console.log('data.json 不存在，稍后创建');
@@ -1107,14 +1110,19 @@ async function pushGitHub() {
     promptToken(() => pushGitHub());
     return false;
   }
+  if (SYNCING) return false; // 防止重复推送
+  SYNCING = true;
+  setSync('syncing');
   try {
-    setSync('syncing');
     const body = {
       message: '数据更新 ' + new Date().toLocaleString('zh-CN'),
       content: b64encode(JSON.stringify(DB)),
       branch: GH_BRANCH
     };
     if (ghDataSha) body.sha = ghDataSha; // 更新已有文件需要 sha
+    // 15 秒超时
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(GH_API, {
       method: 'PUT',
       headers: {
@@ -1122,12 +1130,15 @@ async function pushGitHub() {
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     if (res.status === 401) {
       // Token 无效
       clearToken();
       setSync('offline');
+      SYNCING = false;
       toast('Token 无效，请重新输入');
       promptToken(() => pushGitHub());
       return false;
@@ -1138,9 +1149,11 @@ async function pushGitHub() {
     lastPushTime = Date.now(); // 记录成功推送时间
     savePushTime();
     setSync('ok');
+    SYNCING = false;
     return true;
   } catch(e) {
     console.error('GitHub push error', e);
+    SYNCING = false;
     setSync('offline');
     // GitHub 失败时尝试 jsonblob 备用
     console.log('尝试 jsonblob 备用推送...');
@@ -1214,16 +1227,23 @@ async function pullCloud() {
   return false;
 }
 
+let pushRetryCount = 0; // 推送重试次数
+
 async function pushCloud() {
   // 优先 GitHub，失败自动 fallback 到 jsonblob
   const ok = await pushGitHub();
   if (!ok) {
-    // 推送失败，10 秒后自动重试一次
-    if (pushRetryTimer) clearTimeout(pushRetryTimer);
-    pushRetryTimer = setTimeout(() => {
-      console.log('自动重试推送...');
-      pushCloud();
-    }, 10000);
+    // 推送失败，10 秒后自动重试（最多 2 次，避免无限循环）
+    if (pushRetryCount < 2) {
+      pushRetryCount++;
+      if (pushRetryTimer) clearTimeout(pushRetryTimer);
+      pushRetryTimer = setTimeout(() => {
+        console.log('自动重试推送 (' + pushRetryCount + '/2)...');
+        pushCloud();
+      }, 10000);
+    }
+  } else {
+    pushRetryCount = 0; // 成功则重置计数
   }
   return ok;
 }
@@ -1232,7 +1252,12 @@ async function pushCloud() {
 function save() {
   lastSaveTime = Date.now(); // 记录本地保存时间
   saveLocal();
-  if (SYNCING) return;
+  if (SYNCING) {
+    // 正在推送中，5 秒后重试推送本次修改
+    if (pushRetryTimer) clearTimeout(pushRetryTimer);
+    pushRetryTimer = setTimeout(() => pushCloud(), 5000);
+    return;
+  }
   pushCloud();
 }
 function setSync(state) {
