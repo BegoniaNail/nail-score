@@ -711,9 +711,11 @@
   <div class="panel" id="panel-monthly">
     <div class="card">
       <h2>📆 月度统计</h2>
-      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">按月查看每位美甲师的总积分、总副数、款式明细，并按积分从高到低排行</p>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">按月查看每位美甲师的总副数、总积分及打版情况</p>
       <div class="filter-bar">
-        <label style="font-size:13px">选择月份：</label>
+        <label style="font-size:13px">美甲师：</label>
+        <select id="monthly-artist"></select>
+        <label style="font-size:13px">月份：</label>
         <input type="month" id="monthly-month">
         <button class="btn btn-primary btn-sm" onclick="renderMonthly()">查看</button>
         <button class="btn btn-sm" style="background:#eee" onclick="prevMonth()">◀ 上月</button>
@@ -1833,6 +1835,15 @@ function fillSelects() {
     dsD.innerHTML = '<option value="">请选择打版师或美甲师</option>' + peopleOpts;
     if (curDsD) dsD.value = curDsD;
   }
+
+  // 月度统计美甲师下拉
+  const mA = document.getElementById('monthly-artist');
+  if (mA) {
+    const curMA = mA.value;
+    mA.innerHTML = DB.artists.length ? DB.artists.map(a => `<option value="${a.id}">${a.name}</option>`).join('') : '<option value="">请先添加美甲师</option>';
+    if (curMA) mA.value = curMA;
+  }
+
   const fS = document.getElementById('filter-style');
   const curS = fS.value;
   fS.innerHTML = '<option value="">全部款式</option>' + DB.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
@@ -2133,75 +2144,130 @@ function nextMonth() {
 function renderMonthly() {
   const month = document.getElementById('monthly-month').value || currentMonthStr();
   document.getElementById('monthly-month').value = month;
-  const sm = styleMap(), am = artistMap();
-  const monthRecs = DB.records.filter(r => monthlyKey(r.date) === month);
-
-  // 按美甲师汇总
-  const artistData = {};
-  DB.artists.forEach(a => {
-    artistData[a.id] = { name: a.name, artist: a, totalCount: 0, totalScore: 0, styles: {} };
-  });
-  monthRecs.forEach(r => {
-    if (!artistData[r.artistId]) return;
-    const ad = artistData[r.artistId];
-    ad.totalCount += r.count;
-    ad.totalScore += r.score;
-    const sName = sm[r.styleId] ? sm[r.styleId].name : '已删除款式';
-    const sScore = sm[r.styleId] ? sm[r.styleId].score : 0;
-    if (!ad.styles[r.styleId]) ad.styles[r.styleId] = { name: sName, score: sScore, count: 0, subScore: 0 };
-    ad.styles[r.styleId].count += r.count;
-    ad.styles[r.styleId].subScore += r.score;
-  });
-
-  // 按积分从高到低排序
-  const ranked = Object.values(artistData)
-    .filter(a => a.totalScore > 0 || a.totalCount > 0)
-    .sort((a,b) => b.totalScore - a.totalScore);
-
-  const [y,m] = month.split('-');
+  const artistId = document.getElementById('monthly-artist').value;
+  const container = document.getElementById('monthly-content');
+  const [y, m] = month.split('-');
   const monthName = `${y}年${parseInt(m)}月`;
 
-  // 汇总
-  const grandCount = ranked.reduce((s,a) => s+a.totalCount, 0);
-  const grandScore = ranked.reduce((s,a) => s+a.totalScore, 0);
-  document.getElementById('monthly-summary').textContent =
-    `${monthName} · 共 ${ranked.length} 人 · ${grandCount} 副 · ${grandScore.toFixed(2)} 分`;
-
-  const container = document.getElementById('monthly-content');
-  if (!ranked.length) {
-    container.innerHTML = `<div class="empty">${monthName} 暂无记录</div>`;
+  if (!artistId) {
+    container.innerHTML = `<div class="empty">请选择美甲师</div>`;
+    document.getElementById('monthly-summary').textContent = '';
     return;
   }
 
-  // 顶部排行概览卡片
-  let cardsHtml = '<div class="stat-grid" style="margin-bottom:16px;">';
-  ranked.slice(0,3).forEach((a,i) => {
-    const medal = i===0 ? '🥇' : i===1 ? '🥈' : '🥉';
-    cardsHtml += `<div class="stat-card"><div class="num" style="font-size:22px;">${medal}</div><div style="margin:6px 0;">${avatarHTML(a.artist, 'avatar-lg')}</div><div style="font-weight:600;margin:4px 0;">${a.name}</div><div class="num" style="font-size:22px;color:var(--primary);">${a.totalScore.toFixed(1)}</div><div class="label">积分 · ${a.totalCount}副</div></div>`;
-  });
-  cardsHtml += '</div>';
+  const artist = DB.artists.find(a => a.id === artistId);
+  if (!artist) {
+    container.innerHTML = `<div class="empty">美甲师不存在</div>`;
+    document.getElementById('monthly-summary').textContent = '';
+    return;
+  }
 
-  // 详细排行表
-  let html = cardsHtml;
-  html += `<div class="table-wrap"><table>
-    <thead><tr><th>排名</th><th>美甲师</th><th>总副数</th><th>总积分</th><th>款式明细</th></tr></thead><tbody>`;
-  ranked.forEach((a, i) => {
-    const rank = i + 1;
-    const cls = rank <= 3 ? `rank-${rank}` : '';
-    const styleDetail = Object.values(a.styles).map(s =>
-      `<span class="badge" style="margin:2px;">${s.name} ×${s.count}（${s.subScore.toFixed(2)}分）</span>`
-    ).join('');
-    html += `<tr>
-      <td class="${cls}">${rank<=3?['🥇','🥈','🥉'][rank-1]:rank}</td>
-      <td><div class="avatar-cell">${avatarHTML(a.artist, 'avatar-sm')} <span style="font-weight:600;">${a.name}</span></div></td>
-      <td>${a.totalCount}</td>
-      <td><strong style="color:var(--primary);">${a.totalScore.toFixed(2)}</strong></td>
-      <td style="line-height:2.2;">${styleDetail || '-'}</td>
-    </tr>`;
+  const sm = styleMap();
+  // 该美甲师当月计分记录
+  const monthRecs = DB.records.filter(r => monthlyKey(r.date) === month && r.artistId === artistId);
+
+  // 汇总：总副数、总积分
+  let totalCount = 0, totalScore = 0;
+  const stylesMap = {};
+  monthRecs.forEach(r => {
+    totalCount += r.count;
+    totalScore += r.score;
+    const sName = sm[r.styleId] ? sm[r.styleId].name : '已删除款式';
+    const sScore = sm[r.styleId] ? sm[r.styleId].score : 0;
+    if (!stylesMap[r.styleId]) stylesMap[r.styleId] = { name: sName, score: sScore, count: 0, subScore: 0 };
+    stylesMap[r.styleId].count += r.count;
+    stylesMap[r.styleId].subScore += r.score;
   });
-  // 合计行
-  html += `<tr class="total-row"><td colspan="2">合计</td><td>${grandCount}</td><td>${grandScore.toFixed(2)}</td><td>-</td></tr>`;
-  html += '</tbody></table></div>';
+  totalScore = +totalScore.toFixed(2);
+
+  // 打版数据：该美甲师作为打版师当月打版的款式
+  const seenIds = new Set();
+  const monthStyles = DB.styles.filter(s => {
+    if (s.designer !== artist.name) return false;
+    if ((s.createDate || '').substring(0, 7) !== month) return false;
+    if (seenIds.has(s.id)) return false;
+    seenIds.add(s.id);
+    return true;
+  });
+  const designCount = monthStyles.length;
+  const designScore = +monthStyles.reduce((s, st) => s + (st.score || 0), 0).toFixed(2);
+
+  // 汇总信息
+  document.getElementById('monthly-summary').textContent =
+    `${monthName} · ${artist.name} · ${totalCount} 副 · ${totalScore.toFixed(2)} 分 · 打版 ${designCount} 款`;
+
+  // 信息卡片
+  let html = `
+    <div style="background:linear-gradient(135deg, var(--primary), var(--primary-dark));border-radius:var(--radius);padding:24px;color:white;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        ${avatarHTML(artist, 'avatar-lg')}
+        <div>
+          <div style="font-size:24px;font-weight:700;">${artist.name}</div>
+          <div style="font-size:16px;opacity:0.95;font-weight:600;">美甲师 · 时间：${monthName}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px;opacity:0.85;">当月总副数</div>
+          <div style="font-size:24px;font-weight:700;">${totalCount} 副</div>
+        </div>
+        <div>
+          <div style="font-size:13px;opacity:0.85;">当月总积分</div>
+          <div style="font-size:24px;font-weight:700;">${totalScore.toFixed(2)} 分</div>
+        </div>
+        <div>
+          <div style="font-size:13px;opacity:0.85;">当月打版数量</div>
+          <div style="font-size:24px;font-weight:700;">${designCount} 款</div>
+        </div>
+        <div>
+          <div style="font-size:13px;opacity:0.85;">打版合计积分</div>
+          <div style="font-size:24px;font-weight:700;">${designScore.toFixed(2)} 分</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 计分款式明细表
+  html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);margin-bottom:16px;">
+    <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">当月计分款式明细</h2>`;
+  const styleList = Object.values(stylesMap);
+  if (!styleList.length) {
+    html += `<div class="empty">当月暂无计分记录</div>`;
+  } else {
+    html += `<div class="table-wrap"><table>
+      <thead><tr><th style="width:40%;">款式名称</th><th style="width:20%;">单副积分</th><th style="width:20%;">副数</th><th style="width:20%;">小计积分</th></tr></thead><tbody>`;
+    styleList.forEach(s => {
+      html += `<tr>
+        <td>${s.name}</td>
+        <td>${(s.score || 0).toFixed(2)}</td>
+        <td>${s.count}</td>
+        <td>${s.subScore.toFixed(2)}</td>
+      </tr>`;
+    });
+    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${totalCount} 副</td><td>${totalScore.toFixed(2)}</td></tr>`;
+    html += `</tbody></table></div>`;
+  }
+  html += `</div>`;
+
+  // 打版款式明细表
+  html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);">
+    <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">当月打版款式明细</h2>`;
+  if (!monthStyles.length) {
+    html += `<div class="empty">当月暂无打版记录</div>`;
+  } else {
+    html += `<div class="table-wrap"><table>
+      <thead><tr><th style="width:50%;">款式名称</th><th style="width:25%;">打版日期</th><th style="width:25%;">积分</th></tr></thead><tbody>`;
+    monthStyles.forEach(s => {
+      html += `<tr>
+        <td>${s.name}</td>
+        <td>${s.createDate || '-'}</td>
+        <td>${(s.score || 0).toFixed(2)}</td>
+      </tr>`;
+    });
+    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${designCount} 款</td></tr>`;
+    html += `</tbody></table></div>`;
+  }
+  html += `</div>`;
 
   container.innerHTML = html;
 }
@@ -2826,7 +2892,9 @@ renderAll();
 // 默认选中第一位美甲师并渲染每日统计
 if (DB.artists.length) {
   document.getElementById('daily-artist').value = DB.artists[0].id;
+  document.getElementById('monthly-artist').value = DB.artists[0].id;
   renderDaily();
+  renderMonthly();
 }
 // 异步从云端拉取最新数据（覆盖本地）
 pullCloud().then(ok => {
