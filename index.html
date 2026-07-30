@@ -2235,10 +2235,12 @@ function renderMonthly() {
   });
   const designCount = monthStyles.length;
   const designScore = +monthStyles.reduce((s, st) => s + (st.score || 0), 0).toFixed(2);
+  // 当月总积分 = 当月做款积分 + 打版合计积分 × 2
+  const grandTotalScore = +(totalScore + designScore * 2).toFixed(2);
 
   // 汇总信息
   document.getElementById('monthly-summary').textContent =
-    `${monthName} · ${artist.name} · ${totalCount} 副 · ${totalScore.toFixed(2)} 分 · 打版 ${designCount} 款`;
+    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${grandTotalScore.toFixed(2)} 分 · 打版 ${designCount} 款`;
 
   // 信息卡片
   let html = `
@@ -2256,8 +2258,12 @@ function renderMonthly() {
           <div style="font-size:24px;font-weight:700;">${totalCount} 副</div>
         </div>
         <div>
-          <div style="font-size:13px;opacity:0.85;">当月总积分</div>
+          <div style="font-size:13px;opacity:0.85;">当月做款积分</div>
           <div style="font-size:24px;font-weight:700;">${totalScore.toFixed(2)} 分</div>
+        </div>
+        <div>
+          <div style="font-size:13px;opacity:0.85;">当月总积分</div>
+          <div style="font-size:24px;font-weight:700;">${grandTotalScore.toFixed(2)} 分</div>
         </div>
         <div>
           <div style="font-size:13px;opacity:0.85;">当月打版数量</div>
