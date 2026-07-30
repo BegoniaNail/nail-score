@@ -438,6 +438,10 @@
           <input type="number" id="style-score" value="1" min="0.1" step="0.1">
         </div>
         <div class="form-group">
+          <label>打版师</label>
+          <input type="text" id="style-designer" placeholder="如：小美">
+        </div>
+        <div class="form-group">
           <label>打版日期</label>
           <input type="date" id="style-date">
         </div>
@@ -448,7 +452,7 @@
       <h2>款式列表</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>款式名称</th><th>每副积分</th><th>打版日期</th><th>操作</th></tr></thead>
+          <thead><tr><th>款式名称</th><th>每副积分</th><th>打版师</th><th>打版日期</th><th>操作</th></tr></thead>
           <tbody id="style-list"></tbody>
         </table>
       </div>
@@ -525,7 +529,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>款式名称</th><th>每副积分</th><th>打版日期</th></tr></thead>
+          <thead><tr><th>款式名称</th><th>每副积分</th><th>打版师</th><th>打版日期</th></tr></thead>
           <tbody id="stylescore-list"></tbody>
         </table>
       </div>
@@ -639,6 +643,10 @@
       <input type="number" id="edit-style-score" min="0.1" step="0.1">
     </div>
     <div class="form-group">
+      <label>打版师</label>
+      <input type="text" id="edit-style-designer">
+    </div>
+    <div class="form-group">
       <label>打版日期</label>
       <input type="date" id="edit-style-date">
     </div>
@@ -749,14 +757,16 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function addStyle() {
   const name = document.getElementById('style-name').value.trim();
   const score = parseFloat(document.getElementById('style-score').value);
+  const designer = document.getElementById('style-designer').value.trim();
   const date = document.getElementById('style-date').value;
   if (!name) return toast('请输入款式名称');
   if (isNaN(score) || score <= 0) return toast('积分须大于0');
   if (DB.styles.some(s => s.name === name)) return toast('款式已存在');
-  DB.styles.push({ id: uid(), name, score, createDate: date || '' });
+  DB.styles.push({ id: uid(), name, score, designer: designer || '', createDate: date || '' });
   save();
   document.getElementById('style-name').value = '';
   document.getElementById('style-score').value = '1';
+  document.getElementById('style-designer').value = '';
   document.getElementById('style-date').value = '';
   toast('款式已添加');
   renderAll();
@@ -766,6 +776,7 @@ function editStyle(id) {
   if (!s) return;
   document.getElementById('edit-style-name').value = s.name;
   document.getElementById('edit-style-score').value = s.score;
+  document.getElementById('edit-style-designer').value = s.designer || '';
   document.getElementById('edit-style-date').value = s.createDate || '';
   document.getElementById('modal-style').dataset.id = id;
   document.getElementById('modal-style').classList.add('show');
@@ -776,10 +787,11 @@ function saveStyleEdit() {
   if (!s) return;
   const name = document.getElementById('edit-style-name').value.trim();
   const score = parseFloat(document.getElementById('edit-style-score').value);
+  const designer = document.getElementById('edit-style-designer').value.trim();
   const date = document.getElementById('edit-style-date').value;
   if (!name) return toast('请输入名称');
   if (isNaN(score) || score <= 0) return toast('积分须大于0');
-  s.name = name; s.score = score; s.createDate = date || '';
+  s.name = name; s.score = score; s.designer = designer || ''; s.createDate = date || '';
   save(); closeModal('modal-style');
   toast('已保存'); renderAll();
 }
@@ -1015,11 +1027,12 @@ function updatePreview() {
 
 function renderStyles() {
   const el = document.getElementById('style-list');
-  if (!DB.styles.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无款式，请先添加</td></tr>`; return; }
+  if (!DB.styles.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无款式，请先添加</td></tr>`; return; }
   el.innerHTML = DB.styles.map(s => `
     <tr>
       <td><span class="badge">${s.name}</span></td>
       <td>${s.score}</td>
+      <td>${s.designer || '-'}</td>
       <td>${s.createDate || '-'}</td>
       <td>
         <button class="btn btn-sm btn-edit" onclick="editStyle('${s.id}')">编辑</button>
@@ -1427,7 +1440,7 @@ function renderDaily() {
 function renderStyleScore() {
   const el = document.getElementById('stylescore-list');
   if (!DB.styles.length) {
-    el.innerHTML = `<tr><td colspan="3" class="empty">暂无款式，请先在"款式管理"中添加</td></tr>`;
+    el.innerHTML = `<tr><td colspan="4" class="empty">暂无款式，请先在"款式管理"中添加</td></tr>`;
     document.getElementById('stylescore-summary').textContent = '';
     return;
   }
@@ -1438,6 +1451,7 @@ function renderStyleScore() {
     id: s.id,
     name: s.name,
     score: s.score,
+    designer: s.designer || '',
     createDate: s.createDate || ''
   }));
 
@@ -1460,6 +1474,7 @@ function renderStyleScore() {
     <tr>
       <td><span class="badge">${s.name}</span></td>
       <td><strong style="color:var(--primary);">${s.score}</strong></td>
+      <td>${s.designer || '-'}</td>
       <td>${s.createDate || '-'}</td>
     </tr>
   `).join('');
