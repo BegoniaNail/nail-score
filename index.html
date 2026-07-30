@@ -1974,26 +1974,33 @@ function renderDesignerStat() {
   });
   cardsHtml += '</div>';
 
-  // 详细表
+  // 每个打版师独立的当月表格
   let html = cardsHtml;
-  html += `<div class="table-wrap"><table>
-    <thead><tr><th>排名</th><th>打版师</th><th>打版数量</th><th>总积分</th><th>款式明细</th></tr></thead><tbody>`;
   ranked.forEach((d, i) => {
     const rank = i + 1;
-    const cls = rank <= 3 ? `rank-${rank}` : '';
-    const styleDetail = Object.values(d.styles).map(s =>
-      `<span class="badge" style="margin:2px;">${s.name}（${s.score.toFixed(2)}分）</span>`
-    ).join('');
-    html += `<tr>
-      <td class="${cls}">${rank<=3?['🥇','🥈','🥉'][rank-1]:rank}</td>
-      <td><div class="avatar-cell">${avatarHTML(d.designer, 'avatar-sm')} <span style="font-weight:600;">${d.name}</span></div></td>
-      <td>${d.totalCount}</td>
-      <td><strong style="color:var(--primary);">${d.totalScore.toFixed(2)}</strong></td>
-      <td style="line-height:2.2;">${styleDetail || '-'}</td>
-    </tr>`;
+    const medal = rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : `<span class="rank-badge">${rank}</span>`;
+    html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <div style="font-size:20px;">${medal}</div>
+        ${avatarHTML(d.designer, 'avatar-sm')}
+        <div style="font-weight:600;font-size:16px;">${d.name}</div>
+        <div style="margin-left:auto;font-size:13px;color:var(--text-light);">
+          打版 <strong style="color:var(--primary);">${d.totalCount}</strong> 款 · 总计 <strong style="color:var(--primary);">${d.totalScore.toFixed(2)}</strong> 分
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th style="width:50%;">款式名称</th><th style="width:25%;">打版日期</th><th style="width:25%;">积分</th></tr></thead><tbody>`;
+    const styles = Object.values(d.styles);
+    styles.forEach(s => {
+      html += `<tr>
+        <td>${s.name}</td>
+        <td>${s.createDate || '-'}</td>
+        <td>${s.score.toFixed(2)}</td>
+      </tr>`;
+    });
+    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${d.totalScore.toFixed(2)}</td></tr>`;
+    html += `</tbody></table></div></div>`;
   });
-  html += `<tr class="total-row"><td colspan="2">合计</td><td>${grandCount}</td><td>${grandScore.toFixed(2)}</td><td>-</td></tr>`;
-  html += '</tbody></table></div>';
 
   container.innerHTML = html;
 }
