@@ -1929,8 +1929,15 @@ function renderDesignerStat() {
   document.getElementById('designerstat-month').value = month;
   const sm = styleMap();
 
-  // 筛选当月有打版师关联的款式
-  const monthStyles = DB.styles.filter(s => (s.createDate || '').substring(0, 7) === month && s.designer);
+  // 筛选当月有打版师关联的款式（按款式 id 去重，避免重复计数）
+  const seenIds = new Set();
+  const monthStyles = DB.styles.filter(s => {
+    if (!s.designer) return false;
+    if ((s.createDate || '').substring(0, 7) !== month) return false;
+    if (seenIds.has(s.id)) return false;
+    seenIds.add(s.id);
+    return true;
+  });
 
   // 按打版师汇总
   const designerData = {};
