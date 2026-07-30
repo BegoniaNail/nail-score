@@ -996,6 +996,11 @@ const JSONBLOB_API = 'https://jsonblob.com/api/jsonBlob/' + BIN_ID;
 let DB = { styles: [], artists: [], designers: [], records: [], admins: [] };
 let SYNCING = false;
 let ghDataSha = null; // GitHub 文件的 sha，更新时需要
+let lastSaveTime = 0;    // 最后一次本地保存时间
+let lastPushTime = 0;    // 最后一次成功推送云端时间
+let pushRetryTimer = null; // 推送重试定时器
+const SAVE_TIME_KEY = 'nailScoreSaveTime_v1';
+const PUSH_TIME_KEY = 'nailScorePushTime_v1';
 
 // Token 管理
 function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
@@ -1012,14 +1017,49 @@ function loadLocal() {
   if (!DB.designers) DB.designers = [];
   if (!DB.records) DB.records = [];
   if (!DB.admins) DB.admins = [];
+  // 恢复时间戳
+  lastSaveTime = parseInt(localStorage.getItem(SAVE_TIME_KEY) || '0');
+  lastPushTime = parseInt(localStorage.getItem(PUSH_TIME_KEY) || '0');
 }
-function saveLocal() { localStorage.setItem(KEY, JSON.stringify(DB)); }
+function saveLocal() {
+  localStorage.setItem(KEY, JSON.stringify(DB));
+  localStorage.setItem(SAVE_TIME_KEY, String(lastSaveTime));
+}
+function savePushTime() {
+  localStorage.setItem(PUSH_TIME_KEY, String(lastPushTime));
+}
 
 // base64 编码/解码（支持中文）
 function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
 function b64decode(b64) { return decodeURIComponent(escape(atob(b64))); }
 
 // ===== GitHub 仓库存储（主）=====
+// 合并云端数据到本地：以本地为主，补充本地缺失的记录
+function mergeCloudData(cloudData) {
+  // 如果本地没有未推送的修改，直接用云端数据
+  if (lastSaveTime <= lastPushTime) {
+    DB = cloudData;
+    if (!DB.admins) DB.admins = [];
+    if (!DB.designers) DB.designers = [];
+    saveLocal();
+    return;
+  }
+  // 本地有未推送的修改：合并策略
+  // 以本地 DB 为主，补充云端有而本地没有的记录（按 id 去重）
+  const mergeArr = (localArr, cloudArr) => {
+    const ids = new Set(localArr.map(x => x.id));
+    cloudArr.forEach(x => { if (x.id && !ids.has(x.id)) localArr.push(x); });
+    return localArr;
+  };
+  DB.styles = mergeArr(DB.styles, cloudData.styles || []);
+  DB.artists = mergeArr(DB.artists, cloudData.artists || []);
+  DB.designers = mergeArr(DB.designers, cloudData.designers || []);
+  DB.records = mergeArr(DB.records, cloudData.records || []);
+  // 管理员以本地为主
+  if (!DB.admins || !DB.admins.length) DB.admins = cloudData.admins || [];
+  saveLocal();
+}
+
 // 拉取：公开仓库不需要 Token
 async function pullGitHub() {
   try {
@@ -1040,10 +1080,8 @@ async function pullGitHub() {
     const content = b64decode(info.content.replace(/\n/g, ''));
     const data = JSON.parse(content);
     if (data && data.styles) {
-      DB = data;
-      if (!DB.admins) DB.admins = [];
-      if (!DB.designers) DB.designers = [];
-      saveLocal();
+      // 合并而非直接覆盖，保护本地未推送的修改
+      mergeCloudData(data);
       renderAll();
       setSync('ok');
       return true;
@@ -1093,6 +1131,8 @@ async function pushGitHub() {
     if (!res.ok) throw new Error('GitHub push failed: ' + res.status);
     const info = await res.json();
     ghDataSha = info.content.sha; // 更新 sha
+    lastPushTime = Date.now(); // 记录成功推送时间
+    savePushTime();
     setSync('ok');
     return true;
   } catch(e) {
@@ -1150,10 +1190,7 @@ async function pullCloud() {
     console.log('从 jsonblob 迁移数据到 GitHub...');
     const blobData = await pullJsonblob();
     if (blobData && blobData.styles) {
-      DB = blobData;
-      if (!DB.admins) DB.admins = [];
-      if (!DB.designers) DB.designers = [];
-      saveLocal();
+      mergeCloudData(blobData);
       renderAll();
       // 推送到 GitHub 完成迁移
       await pushCloud();
@@ -1164,10 +1201,7 @@ async function pullCloud() {
   // GitHub 失败，尝试 jsonblob
   const blobData = await pullJsonblob();
   if (blobData && blobData.styles) {
-    DB = blobData;
-    if (!DB.admins) DB.admins = [];
-    if (!DB.designers) DB.designers = [];
-    saveLocal();
+    mergeCloudData(blobData);
     renderAll();
     setSync('ok');
     return true;
@@ -1178,11 +1212,21 @@ async function pullCloud() {
 
 async function pushCloud() {
   // 优先 GitHub，失败自动 fallback 到 jsonblob
-  return await pushGitHub();
+  const ok = await pushGitHub();
+  if (!ok) {
+    // 推送失败，10 秒后自动重试一次
+    if (pushRetryTimer) clearTimeout(pushRetryTimer);
+    pushRetryTimer = setTimeout(() => {
+      console.log('自动重试推送...');
+      pushCloud();
+    }, 10000);
+  }
+  return ok;
 }
 
 // 保存 = 本地立即存 + 异步推云端
 function save() {
+  lastSaveTime = Date.now(); // 记录本地保存时间
   saveLocal();
   if (SYNCING) return;
   pushCloud();
@@ -2926,8 +2970,15 @@ pullCloud().then(ok => {
     }
   }
 });
-// 每60秒自动同步一次
-setInterval(pullCloud, 60000);
+// 每60秒自动同步：先推送本地修改，再拉取云端更新
+setInterval(async () => {
+  // 如果本地有未推送的修改，先推送
+  if (lastSaveTime > lastPushTime) {
+    await pushCloud();
+  }
+  // 再拉取云端（mergeCloudData 会保护本地未推送的修改）
+  await pullCloud();
+}, 60000);
 </script>
 </body>
 </html>
