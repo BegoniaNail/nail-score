@@ -504,7 +504,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>日期</th><th>美甲师</th><th>款式</th><th>数量</th><th>积分</th><th>备注</th><th>操作</th></tr></thead>
+          <thead><tr><th>日期</th><th>美甲师</th><th>款式</th><th>数量</th><th>积分</th><th>备注</th></tr></thead>
           <tbody id="detail-list"></tbody>
         </table>
       </div>
@@ -1104,7 +1104,7 @@ function renderDetail() {
   const totalScore = recs.reduce((s,r) => s+r.score, 0);
   const totalCount = recs.reduce((s,r) => s+r.count, 0);
   document.getElementById('detail-summary').textContent = `共 ${recs.length} 条，${totalCount} 副，${totalScore.toFixed(2)} 分`;
-  if (!recs.length) { el.innerHTML = `<tr><td colspan="7" class="empty">无匹配记录</td></tr>`; return; }
+  if (!recs.length) { el.innerHTML = `<tr><td colspan="6" class="empty">无匹配记录</td></tr>`; return; }
   el.innerHTML = recs.map(r => `<tr>
     <td>${r.date}</td>
     <td>${am[r.artistId]?.name || '-'}</td>
@@ -1112,7 +1112,6 @@ function renderDetail() {
     <td>${r.count}</td>
     <td>${r.score}</td>
     <td>${r.note || '-'}</td>
-    <td><button class="btn btn-sm btn-danger" onclick="delRecord('${r.id}')">删除</button></td>
   </tr>`).join('');
 }
 function clearDetailFilter() {
