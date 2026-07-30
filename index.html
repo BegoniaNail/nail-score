@@ -353,6 +353,7 @@
           <div class="nav-group-items">
             <button class="tab active" data-tab="daily">📊 每日统计</button>
             <button class="tab" data-tab="detail">📋 明细记录</button>
+            <button class="tab" data-tab="stylescore">💎 款式计分</button>
           </div>
         </div>
         <div class="nav-group collapsed" data-group="input">
@@ -501,6 +502,31 @@
         <table>
           <thead><tr><th>日期</th><th>美甲师</th><th>款式</th><th>数量</th><th>积分</th><th>备注</th><th>操作</th></tr></thead>
           <tbody id="detail-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 款式计分查询 -->
+  <div class="panel" id="panel-stylescore">
+    <div class="card">
+      <h2>💎 款式计分查询</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">查看所有款式的积分标准和打版日期</p>
+      <div class="filter-bar">
+        <input type="text" id="stylescore-search" placeholder="🔍 搜索款式名称..." oninput="renderStyleScore()" style="flex:1;min-width:160px;">
+        <select id="stylescore-sort" onchange="renderStyleScore()">
+          <option value="name">按名称排序</option>
+          <option value="score-desc">按积分从高到低</option>
+          <option value="score-asc">按积分从低到高</option>
+          <option value="date-desc">按打版日期最新</option>
+          <option value="date-asc">按打版日期最早</option>
+        </select>
+        <span id="stylescore-summary" style="margin-left:auto;font-size:13px;color:var(--text-light)"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>款式名称</th><th>每副积分</th><th>打版日期</th><th>已做副数</th><th>累计积分</th></tr></thead>
+          <tbody id="stylescore-list"></tbody>
         </table>
       </div>
     </div>
@@ -1397,6 +1423,60 @@ function renderDaily() {
   container.innerHTML = html;
 }
 
+// ===== 款式计分查询 =====
+function renderStyleScore() {
+  const el = document.getElementById('stylescore-list');
+  if (!DB.styles.length) {
+    el.innerHTML = `<tr><td colspan="5" class="empty">暂无款式，请先在"款式管理"中添加</td></tr>`;
+    document.getElementById('stylescore-summary').textContent = '';
+    return;
+  }
+  const keyword = (document.getElementById('stylescore-search').value || '').trim().toLowerCase();
+  const sort = document.getElementById('stylescore-sort').value;
+
+  // 统计每个款式的已做副数和累计积分
+  let data = DB.styles.map(s => {
+    const recs = DB.records.filter(r => r.styleId === s.id);
+    return {
+      id: s.id,
+      name: s.name,
+      score: s.score,
+      createDate: s.createDate || '',
+      count: recs.reduce((sum, r) => sum + r.count, 0),
+      totalScore: recs.reduce((sum, r) => sum + r.score, 0)
+    };
+  });
+
+  // 搜索筛选
+  if (keyword) data = data.filter(s => s.name.toLowerCase().includes(keyword));
+
+  // 排序
+  data.sort((a, b) => {
+    if (sort === 'score-desc') return b.score - a.score;
+    if (sort === 'score-asc') return a.score - b.score;
+    if (sort === 'date-desc') return (b.createDate || '').localeCompare(a.createDate || '');
+    if (sort === 'date-asc') return (a.createDate || '').localeCompare(b.createDate || '');
+    return a.name.localeCompare(b.name, 'zh');
+  });
+
+  // 汇总
+  const totalStyles = data.length;
+  const totalCount = data.reduce((s, x) => s + x.count, 0);
+  const totalScore = data.reduce((s, x) => s + x.totalScore, 0);
+  document.getElementById('stylescore-summary').textContent =
+    `共 ${totalStyles} 个款式 · ${totalCount} 副 · ${totalScore.toFixed(2)} 分`;
+
+  el.innerHTML = data.map(s => `
+    <tr>
+      <td><span class="badge">${s.name}</span></td>
+      <td><strong style="color:var(--primary);">${s.score}</strong></td>
+      <td>${s.createDate || '-'}</td>
+      <td>${s.count}</td>
+      <td>${s.totalScore.toFixed(2)}</td>
+    </tr>
+  `).join('');
+}
+
 // ===== 通用 =====
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -1408,7 +1488,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 function renderAll() {
   fillSelects();
   renderStyles(); renderArtists(); renderRecordPanel();
-  renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDaily(); renderCross();
+  renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDaily(); renderStyleScore(); renderCross();
 }
 
 // 分组折叠
@@ -1441,6 +1521,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     if (key === 'period') renderPeriod();
     if (key === 'monthly') renderMonthly();
     if (key === 'daily') renderDaily();
+    if (key === 'stylescore') renderStyleScore();
     if (key === 'cross') renderCross();
   });
 });
