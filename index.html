@@ -445,6 +445,7 @@
           <div class="nav-group-title" onclick="toggleGroup(this)">管理系统 <span class="arrow">▼</span></div>
           <div class="nav-group-items">
             <button class="tab" data-tab="admin">🔐 管理员设置</button>
+            <button class="tab" data-tab="synconfig">☁️ 数据同步设置</button>
           </div>
         </div>
       </div>
@@ -792,6 +793,45 @@
     </div>
   </div>
 
+  <!-- 数据同步设置 -->
+  <div class="panel" id="panel-synconfig">
+    <div class="card">
+      <h2>☁️ 数据同步设置</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;line-height:1.7;">
+        数据存储在 GitHub 仓库 <code>BegoniaNail/nail-score/data.json</code> 中，<br>
+        与代码同仓库管理，拥有完整版本历史。<br>
+        <strong>读取数据</strong>无需 Token；<strong>写入数据</strong>需要输入一次 GitHub Token。
+      </p>
+      <div id="token-status-box" style="margin-bottom:16px;"></div>
+      <div class="form-row" style="gap:10px;">
+        <div class="form-group" style="flex:1;">
+          <label>GitHub Token</label>
+          <input type="password" id="synconfig-token" placeholder="ghp_xxxxxxxx...">
+        </div>
+        <button class="btn btn-primary" onclick="saveTokenFromConfig()">保存 Token</button>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-light);line-height:1.6;">
+        <p>📝 <strong>如何生成 Token：</strong></p>
+        <ol style="margin:4px 0 8px 18px;">
+          <li>点击 <a href="https://github.com/settings/tokens/new?scopes=repo&description=nail-score-data" target="_blank" style="color:var(--primary);">此链接</a> 打开 GitHub Token 生成页</li>
+          <li>确认已勾选 <code>repo</code> 权限</li>
+          <li>点击页面底部「Generate token」</li>
+          <li>复制生成的 <code>ghp_xxxx...</code> 粘贴到上方输入框</li>
+        </ol>
+        <p>⚠️ Token 只会保存在当前手机浏览器中，不会上传到任何地方。</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📦 数据管理</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn" style="background:var(--primary-light);" onclick="manualSync()">🔄 手动同步</button>
+        <button class="btn" style="background:#eee;" onclick="exportData()">💾 导出数据到文件</button>
+        <button class="btn" style="background:#c0505a;color:#fff;" onclick="clearGithubToken()">🗑️ 清除 Token</button>
+      </div>
+      <div id="sync-info" style="margin-top:12px;font-size:12px;color:var(--text-light);"></div>
+    </div>
+  </div>
+
   </main>
   </div><!-- /.layout -->
 </div>
@@ -827,6 +867,26 @@
     <div class="modal-actions">
       <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-confirm')">取消</button>
       <button class="btn btn-primary btn-sm" onclick="doConfirm()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- GitHub Token 输入弹窗 -->
+<div class="modal-mask" id="modal-token">
+  <div class="modal">
+    <h3>🔑 数据同步授权</h3>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;line-height:1.6;">
+      为了将数据安全地保存到 GitHub 仓库，需要输入一次 GitHub Token。<br>
+      <strong>仅需输入一次</strong>，之后会自动记住。<br>
+      <a href="https://github.com/settings/tokens/new?scopes=repo&description=nail-score-data" target="_blank" style="color:var(--primary);">点此生成 Token</a>（勾选 repo 权限）
+    </p>
+    <div class="form-group">
+      <label>GitHub Token</label>
+      <input type="password" id="token-input" placeholder="ghp_xxxxxxxx...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#eee" onclick="skipToken()">暂不使用</button>
+      <button class="btn btn-primary btn-sm" onclick="saveTokenAndPush()">保存并同步</button>
     </div>
   </div>
 </div>
@@ -917,12 +977,27 @@
 </div>
 
 <script>
-// ===== 数据层（云端同步 + 本地缓存）=====
+// ===== 数据层（GitHub 仓库存储 + 本地缓存 + jsonblob 备用）=====
 const KEY = 'nailScoreData_v1';
+const TOKEN_KEY = 'nailGithubToken_v1';
+// GitHub 仓库配置
+const GH_OWNER = 'BegoniaNail';
+const GH_REPO = 'nail-score';
+const GH_BRANCH = 'main';
+const GH_DATA_PATH = 'data.json';
+const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_DATA_PATH}`;
+// jsonblob 备用（迁移及 fallback）
 const BIN_ID = '019fafca-3462-704c-9eed-3db463b6f5e1';
-const API = 'https://jsonblob.com/api/jsonBlob/' + BIN_ID;
+const JSONBLOB_API = 'https://jsonblob.com/api/jsonBlob/' + BIN_ID;
+
 let DB = { styles: [], artists: [], designers: [], records: [], admins: [] };
 let SYNCING = false;
+let ghDataSha = null; // GitHub 文件的 sha，更新时需要
+
+// Token 管理
+function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
+function clearToken() { localStorage.removeItem(TOKEN_KEY); }
 
 function loadLocal() {
   try {
@@ -937,55 +1012,176 @@ function loadLocal() {
 }
 function saveLocal() { localStorage.setItem(KEY, JSON.stringify(DB)); }
 
-// 云端拉取
-async function pullCloud() {
+// base64 编码/解码（支持中文）
+function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
+function b64decode(b64) { return decodeURIComponent(escape(atob(b64))); }
+
+// ===== GitHub 仓库存储（主）=====
+// 拉取：公开仓库不需要 Token
+async function pullGitHub() {
   try {
     setSync('syncing');
-    const res = await fetch(API, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error('pull failed: ' + res.status);
-    const data = await res.json();
+    const headers = { 'Accept': 'application/vnd.github.v3+json' };
+    const token = getToken();
+    if (token) headers['Authorization'] = `token ${token}`;
+    const res = await fetch(`${GH_API}?ref=${GH_BRANCH}&t=${Date.now()}`, { headers });
+    if (res.status === 404) {
+      // data.json 还不存在，需要创建
+      console.log('data.json 不存在，稍后创建');
+      setSync('offline');
+      return null;
+    }
+    if (!res.ok) throw new Error('GitHub pull failed: ' + res.status);
+    const info = await res.json();
+    ghDataSha = info.sha; // 保存 sha 供更新用
+    const content = b64decode(info.content.replace(/\n/g, ''));
+    const data = JSON.parse(content);
     if (data && data.styles) {
       DB = data;
-      if (!DB.admins) DB.admins = []; // 兼容旧数据
-      if (!DB.designers) DB.designers = []; // 兼容旧数据
-      if (!DB.admins.length) {
-        // 没有管理员，创建默认主管理员
-        DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
-        pushCloud();
-      }
+      if (!DB.admins) DB.admins = [];
+      if (!DB.designers) DB.designers = [];
       saveLocal();
       renderAll();
+      setSync('ok');
+      return true;
     }
     setSync('ok');
-    return true;
+    return false;
   } catch(e) {
-    console.error('pull error', e);
+    console.error('GitHub pull error', e);
     setSync('offline');
     return false;
   }
 }
-// 云端推送
-async function pushCloud() {
+
+// 推送：需要 Token
+async function pushGitHub() {
+  const token = getToken();
+  if (!token) {
+    // 没有 Token，提示输入
+    promptToken(() => pushGitHub());
+    return false;
+  }
   try {
     setSync('syncing');
-    const res = await fetch(API, {
+    const body = {
+      message: '数据更新 ' + new Date().toLocaleString('zh-CN'),
+      content: b64encode(JSON.stringify(DB)),
+      branch: GH_BRANCH
+    };
+    if (ghDataSha) body.sha = ghDataSha; // 更新已有文件需要 sha
+    const res = await fetch(GH_API, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    if (res.status === 401) {
+      // Token 无效
+      clearToken();
+      setSync('offline');
+      toast('Token 无效，请重新输入');
+      promptToken(() => pushGitHub());
+      return false;
+    }
+    if (!res.ok) throw new Error('GitHub push failed: ' + res.status);
+    const info = await res.json();
+    ghDataSha = info.content.sha; // 更新 sha
+    setSync('ok');
+    return true;
+  } catch(e) {
+    console.error('GitHub push error', e);
+    setSync('offline');
+    // GitHub 失败时尝试 jsonblob 备用
+    console.log('尝试 jsonblob 备用推送...');
+    return await pushJsonblob();
+  }
+}
+
+// ===== jsonblob 备用存储 =====
+async function pullJsonblob() {
+  try {
+    const res = await fetch(JSONBLOB_API, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('jsonblob pull failed: ' + res.status);
+    return await res.json();
+  } catch(e) {
+    console.error('jsonblob pull error', e);
+    return null;
+  }
+}
+async function pushJsonblob() {
+  try {
+    const res = await fetch(JSONBLOB_API, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(DB)
     });
-    if (!res.ok) throw new Error('push failed: ' + res.status);
+    if (!res.ok) throw new Error('jsonblob push failed: ' + res.status);
     setSync('ok');
     return true;
   } catch(e) {
-    console.error('push error', e);
+    console.error('jsonblob push error', e);
     setSync('offline');
     return false;
   }
 }
+
+// ===== 统一的拉取/推送接口 =====
+async function pullCloud() {
+  // 优先 GitHub，失败则 jsonblob
+  const ghResult = await pullGitHub();
+  if (ghResult === true) {
+    // 确保有管理员
+    if (!DB.admins || !DB.admins.length) {
+      DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
+      saveLocal();
+      pushCloud();
+    }
+    return true;
+  }
+  if (ghResult === null) {
+    // data.json 不存在 → 从 jsonblob 迁移数据
+    console.log('从 jsonblob 迁移数据到 GitHub...');
+    const blobData = await pullJsonblob();
+    if (blobData && blobData.styles) {
+      DB = blobData;
+      if (!DB.admins) DB.admins = [];
+      if (!DB.designers) DB.designers = [];
+      saveLocal();
+      renderAll();
+      // 推送到 GitHub 完成迁移
+      await pushCloud();
+      setSync('ok');
+      return true;
+    }
+  }
+  // GitHub 失败，尝试 jsonblob
+  const blobData = await pullJsonblob();
+  if (blobData && blobData.styles) {
+    DB = blobData;
+    if (!DB.admins) DB.admins = [];
+    if (!DB.designers) DB.designers = [];
+    saveLocal();
+    renderAll();
+    setSync('ok');
+    return true;
+  }
+  setSync('offline');
+  return false;
+}
+
+async function pushCloud() {
+  // 优先 GitHub，失败自动 fallback 到 jsonblob
+  return await pushGitHub();
+}
+
 // 保存 = 本地立即存 + 异步推云端
 function save() {
   saveLocal();
-  if (SYNCING) return; // 防止重复推送
+  if (SYNCING) return;
   pushCloud();
 }
 function setSync(state) {
@@ -993,7 +1189,7 @@ function setSync(state) {
   if (!el) return;
   const map = {
     syncing: { t: '🔄 同步中…', c: '#f0b870' },
-    ok: { t: '☁️ 已同步', c: '#7ec99c' },
+    ok: { t: '☁️ 已同步（GitHub）', c: '#7ec99c' },
     offline: { t: '⚠️ 离线模式（仅本地）', c: '#c0505a' }
   };
   const m = map[state] || map.ok;
@@ -1001,6 +1197,32 @@ function setSync(state) {
   el.style.color = m.c;
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// ===== Token 输入管理 =====
+let tokenCallback = null;
+function promptToken(cb) {
+  tokenCallback = cb;
+  document.getElementById('token-input').value = getToken();
+  openModal('modal-token');
+}
+function saveTokenAndPush() {
+  const t = document.getElementById('token-input').value.trim();
+  if (!t) { toast('请输入 Token'); return; }
+  setToken(t);
+  closeModal('modal-token');
+  if (tokenCallback) { const cb = tokenCallback; tokenCallback = null; cb(); }
+}
+function skipToken() {
+  closeModal('modal-token');
+  tokenCallback = null;
+  setSync('offline');
+  toast('未设置 Token，数据仅保存在本地');
+}
+function clearGithubToken() {
+  clearToken();
+  toast('Token 已清除');
+  setSync('offline');
+}
 
 // ===== 权限管理 =====
 const SESSION_KEY = 'nailAdminSession';
@@ -1159,6 +1381,48 @@ function renderAdmins() {
     const delBtn = a.isMaster ? '' : `<button class="btn btn-sm btn-danger" onclick="delAdmin('${a.id}')">删除</button>`;
     return `<tr><td>${a.name}</td><td>${role}</td><td>${editBtn} ${delBtn}</td></tr>`;
   }).join('');
+}
+
+// ===== 数据同步设置页面 =====
+function renderSyncConfig() {
+  const box = document.getElementById('token-status-box');
+  const info = document.getElementById('sync-info');
+  if (!box) return;
+  const hasToken = !!getToken();
+  box.innerHTML = hasToken
+    ? '<span class="badge" style="background:#7ec99c;color:white;">✅ Token 已设置</span>'
+    : '<span class="badge" style="background:#c0505a;color:white;">❌ Token 未设置（仅本地保存）</span>';
+  if (info) {
+    info.innerHTML = `仓库：<code>${GH_OWNER}/${GH_REPO}/${GH_DATA_PATH}</code> · 分支：<code>${GH_BRANCH}</code>` +
+      (ghDataSha ? `<br>文件 SHA：<code>${ghDataSha.substring(0,8)}...</code>` : '');
+  }
+}
+function saveTokenFromConfig() {
+  const t = document.getElementById('synconfig-token').value.trim();
+  if (!t) return toast('请输入 Token');
+  setToken(t);
+  toast('Token 已保存，正在测试同步...');
+  pushCloud().then(ok => {
+    if (ok) toast('同步成功！');
+    renderSyncConfig();
+  });
+}
+async function manualSync() {
+  toast('正在同步...');
+  await pullCloud();
+  await pushCloud();
+  renderSyncConfig();
+  toast('同步完成');
+}
+function exportData() {
+  const blob = new Blob([JSON.stringify(DB, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `nail-score-backup-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('数据已导出');
 }
 
 // ===== 款式 =====
@@ -2465,7 +2729,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     e.preventDefault();
     const key = this.dataset.tab;
     // 受保护页面：需登录才能访问
-    const protectedTabs = ['record', 'styles', 'artists', 'designers', 'period', 'monthly', 'designerstat', 'cross'];
+    const protectedTabs = ['record', 'styles', 'artists', 'designers', 'period', 'monthly', 'designerstat', 'cross', 'synconfig'];
     // 管理员设置页：仅主管理员
     if (key === 'admin' && !isMaster()) {
       toast('仅主管理员可访问');
@@ -2492,6 +2756,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     if (key === 'stylescore') renderStyleScore();
     if (key === 'cross') renderCross();
     if (key === 'admin') renderAdmins();
+    if (key === 'synconfig') renderSyncConfig();
   });
 });
 
@@ -2520,7 +2785,11 @@ function seedIfEmpty() {
 
 // 启动：先本地渲染，再云端同步
 loadLocal();
-seedIfEmpty(); // 本地为空且云端也为空时预置示例
+// 仅确保有管理员（不预置示例数据，等云端拉取后再决定）
+if (!DB.admins.length) {
+  DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
+}
+saveLocal();
 document.getElementById('rec-date').value = todayStr();
 document.getElementById('monthly-month').value = currentMonthStr();
 document.getElementById('designerstat-month').value = currentMonthStr();
@@ -2537,12 +2806,12 @@ pullCloud().then(ok => {
   if (ok) {
     // 云端拉取后确保至少有一个主管理员
     if (!DB.admins || !DB.admins.length) {
-      seedIfEmpty();
+      DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
       saveLocal();
       pushCloud();
     }
-    // 云端有数据则用云端的；若云端为空且本地有示例数据，推送到云端
-    if ((!DB.styles.length && !DB.artists.length && !DB.records.length)) {
+    // 若云端也为空，预置示例数据
+    if (!DB.styles.length && !DB.artists.length && !DB.records.length) {
       seedIfEmpty();
       saveLocal();
       pushCloud();
@@ -2553,6 +2822,13 @@ pullCloud().then(ok => {
       document.getElementById('daily-artist').value = DB.artists[0].id;
     }
     renderDaily();
+  } else {
+    // 云端拉取失败，本地也完全为空时预置示例
+    if (!DB.styles.length && !DB.artists.length && !DB.records.length) {
+      seedIfEmpty();
+      renderAll();
+      renderDaily();
+    }
   }
 });
 // 每60秒自动同步一次
