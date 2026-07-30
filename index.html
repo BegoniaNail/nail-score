@@ -418,6 +418,7 @@
             <button class="tab" data-tab="record">📝 计分录入</button>
             <button class="tab" data-tab="styles">🎨 款式管理</button>
             <button class="tab" data-tab="artists">👤 美甲师管理</button>
+            <button class="tab" data-tab="designers">👠 打版师管理</button>
           </div>
         </div>
         <div class="nav-group collapsed" data-group="stats">
@@ -501,7 +502,7 @@
         </div>
         <div class="form-group">
           <label>打版师</label>
-          <input type="text" id="style-designer" placeholder="如：小美">
+          <select id="style-designer"><option value="">请先添加打版师</option></select>
         </div>
         <div class="form-group">
           <label>打版日期</label>
@@ -545,6 +546,35 @@
         <table>
           <thead><tr><th>头像</th><th>姓名</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
           <tbody id="artist-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 打版师管理 -->
+  <div class="panel" id="panel-designers">
+    <div class="card">
+      <h2>添加打版师</h2>
+      <div class="avatar-upload">
+        <div id="add-designer-avatar-preview"><span class="avatar-placeholder">头</span></div>
+        <label for="add-designer-avatar-input">📷 选择头像（可选）</label>
+        <input type="file" id="add-designer-avatar-input" accept="image/*" style="display:none;" onchange="previewAddDesignerAvatar(this)">
+        <button type="button" class="btn btn-sm" id="add-designer-avatar-clear" style="background:#eee;display:none;" onclick="clearAddDesignerAvatar()">移除</button>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>打版师姓名</label>
+          <input type="text" id="designer-name" placeholder="如：小美">
+        </div>
+        <button class="btn btn-primary" onclick="addDesigner()">+ 添加</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>打版师列表</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>头像</th><th>姓名</th><th>打版款式数</th><th>操作</th></tr></thead>
+          <tbody id="designer-list"></tbody>
         </table>
       </div>
     </div>
@@ -801,7 +831,7 @@
     </div>
     <div class="form-group">
       <label>打版师</label>
-      <input type="text" id="edit-style-designer">
+      <select id="edit-style-designer"><option value="">无</option></select>
     </div>
     <div class="form-group">
       <label>打版日期</label>
@@ -833,12 +863,31 @@
   </div>
 </div>
 
+<div class="modal-mask" id="modal-designer">
+  <div class="modal">
+    <h3>编辑打版师</h3>
+    <div class="avatar-upload">
+      <div id="edit-designer-avatar-preview"><span class="avatar-placeholder">头</span></div>
+      <label for="edit-designer-avatar-input">📷 更换头像</label>
+      <input type="file" id="edit-designer-avatar-input" accept="image/*" style="display:none;" onchange="previewEditDesignerAvatar(this)">
+    </div>
+    <div class="form-group">
+      <label>姓名</label>
+      <input type="text" id="edit-designer-name">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-designer')">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="saveDesignerEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ===== 数据层（云端同步 + 本地缓存）=====
 const KEY = 'nailScoreData_v1';
 const BIN_ID = '019fafca-3462-704c-9eed-3db463b6f5e1';
 const API = 'https://jsonblob.com/api/jsonBlob/' + BIN_ID;
-let DB = { styles: [], artists: [], records: [], admins: [] };
+let DB = { styles: [], artists: [], designers: [], records: [], admins: [] };
 let SYNCING = false;
 
 function loadLocal() {
@@ -848,6 +897,7 @@ function loadLocal() {
   } catch(e) { console.error(e); }
   if (!DB.styles) DB.styles = [];
   if (!DB.artists) DB.artists = [];
+  if (!DB.designers) DB.designers = [];
   if (!DB.records) DB.records = [];
   if (!DB.admins) DB.admins = [];
 }
@@ -863,6 +913,7 @@ async function pullCloud() {
     if (data && data.styles) {
       DB = data;
       if (!DB.admins) DB.admins = []; // 兼容旧数据
+      if (!DB.designers) DB.designers = []; // 兼容旧数据
       if (!DB.admins.length) {
         // 没有管理员，创建默认主管理员
         DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
@@ -1081,7 +1132,7 @@ function addStyle() {
   if (!requireLogin()) return;
   const name = document.getElementById('style-name').value.trim();
   const score = parseFloat(document.getElementById('style-score').value);
-  const designer = document.getElementById('style-designer').value.trim();
+  const designer = document.getElementById('style-designer').value;
   const date = document.getElementById('style-date').value;
   if (!name) return toast('请输入款式名称');
   if (isNaN(score) || score <= 0) return toast('积分须大于0');
@@ -1101,7 +1152,12 @@ function editStyle(id) {
   if (!s) return;
   document.getElementById('edit-style-name').value = s.name;
   document.getElementById('edit-style-score').value = s.score;
-  document.getElementById('edit-style-designer').value = s.designer || '';
+  // 兼容旧数据：如果打版师不在列表中，临时添加选项
+  const esd = document.getElementById('edit-style-designer');
+  if (s.designer && !DB.designers.some(d => d.name === s.designer)) {
+    esd.innerHTML = '<option value="">无</option>' + DB.designers.map(d => `<option value="${d.name}">${d.name}</option>`).join('') + `<option value="${s.designer}">${s.designer}</option>`;
+  }
+  esd.value = s.designer || '';
   document.getElementById('edit-style-date').value = s.createDate || '';
   document.getElementById('modal-style').dataset.id = id;
   document.getElementById('modal-style').classList.add('show');
@@ -1113,7 +1169,7 @@ function saveStyleEdit() {
   if (!s) return;
   const name = document.getElementById('edit-style-name').value.trim();
   const score = parseFloat(document.getElementById('edit-style-score').value);
-  const designer = document.getElementById('edit-style-designer').value.trim();
+  const designer = document.getElementById('edit-style-designer').value;
   const date = document.getElementById('edit-style-date').value;
   if (!name) return toast('请输入名称');
   if (isNaN(score) || score <= 0) return toast('积分须大于0');
@@ -1230,6 +1286,78 @@ function delArtist(id) {
   requireConfirm(msg, function() {
     DB.artists = DB.artists.filter(x => x.id !== id);
     DB.records = DB.records.filter(r => r.artistId !== id);
+    save(); toast('已删除'); renderAll();
+  });
+}
+
+// ===== 打版师 =====
+let pendingAddDesignerAvatar = '';
+let pendingEditDesignerAvatar = '';
+
+function previewAddDesignerAvatar(input) {
+  fileToAvatar(input.files[0], function(data) {
+    pendingAddDesignerAvatar = data;
+    const el = document.getElementById('add-designer-avatar-preview');
+    el.innerHTML = data ? `<img src="${data}" class="avatar">` : '<span class="avatar-placeholder">头</span>';
+    document.getElementById('add-designer-avatar-clear').style.display = data ? '' : 'none';
+  });
+}
+function clearAddDesignerAvatar() {
+  pendingAddDesignerAvatar = '';
+  document.getElementById('add-designer-avatar-input').value = '';
+  document.getElementById('add-designer-avatar-preview').innerHTML = '<span class="avatar-placeholder">头</span>';
+  document.getElementById('add-designer-avatar-clear').style.display = 'none';
+}
+function previewEditDesignerAvatar(input) {
+  fileToAvatar(input.files[0], function(data) {
+    if (data) pendingEditDesignerAvatar = data;
+    const el = document.getElementById('edit-designer-avatar-preview');
+    el.innerHTML = data ? `<img src="${data}" class="avatar">` : el.innerHTML;
+  });
+}
+
+function addDesigner() {
+  if (!requireLogin()) return;
+  const name = document.getElementById('designer-name').value.trim();
+  if (!name) return toast('请输入姓名');
+  if (DB.designers.some(d => d.name === name)) return toast('打版师已存在');
+  DB.designers.push({ id: uid(), name, avatar: pendingAddDesignerAvatar || '' });
+  save();
+  document.getElementById('designer-name').value = '';
+  clearAddDesignerAvatar();
+  toast('打版师已添加'); renderAll();
+}
+function editDesigner(id) {
+  if (!requireLogin()) return;
+  const d = DB.designers.find(x => x.id === id);
+  if (!d) return;
+  document.getElementById('edit-designer-name').value = d.name;
+  pendingEditDesignerAvatar = '';
+  const el = document.getElementById('edit-designer-avatar-preview');
+  el.innerHTML = d.avatar ? `<img src="${d.avatar}" class="avatar">` : `<span class="avatar-placeholder">${d.name[0]}</span>`;
+  document.getElementById('modal-designer').dataset.id = id;
+  document.getElementById('modal-designer').classList.add('show');
+}
+function saveDesignerEdit() {
+  if (!requireLogin()) return;
+  const id = document.getElementById('modal-designer').dataset.id;
+  const d = DB.designers.find(x => x.id === id);
+  if (!d) return;
+  const name = document.getElementById('edit-designer-name').value.trim();
+  if (!name) return toast('请输入姓名');
+  d.name = name;
+  if (pendingEditDesignerAvatar) d.avatar = pendingEditDesignerAvatar;
+  save(); closeModal('modal-designer');
+  pendingEditDesignerAvatar = '';
+  toast('已保存'); renderAll();
+}
+function delDesigner(id) {
+  const d = DB.designers.find(x => x.id === id);
+  if (!d) return;
+  const used = DB.styles.filter(s => s.designer === d.name).length;
+  const msg = used > 0 ? `确认删除打版师「${d.name}」？有 ${used} 个款式关联此打版师。` : `确认删除打版师「${d.name}」？`;
+  requireConfirm(msg, function() {
+    DB.designers = DB.designers.filter(x => x.id !== id);
     save(); toast('已删除'); renderAll();
   });
 }
@@ -1403,6 +1531,19 @@ function fillSelects() {
   if (styleRows.length) renderStyleRows();
   else renderStyleRows();
   updatePreview();
+
+  // 打版师下拉（款式管理添加/编辑）
+  const dOpts = DB.designers.length
+    ? DB.designers.map(d => `<option value="${d.name}">${d.name}</option>`).join('')
+    : '<option value="">请先添加打版师</option>';
+  const sd = document.getElementById('style-designer');
+  const curSD = sd.value;
+  sd.innerHTML = dOpts;
+  if (curSD) sd.value = curSD;
+  const esd = document.getElementById('edit-style-designer');
+  const curESD = esd.value;
+  esd.innerHTML = '<option value="">无</option>' + (DB.designers.length ? DB.designers.map(d => `<option value="${d.name}">${d.name}</option>`).join('') : '');
+  if (curESD) esd.value = curESD;
 }
 function updatePreview() {
   const el = document.getElementById('rec-preview');
@@ -1451,6 +1592,23 @@ function renderArtists() {
       <td>
         <button class="btn btn-sm btn-edit" onclick="editArtist('${a.id}')">编辑</button>
         <button class="btn btn-sm btn-danger" onclick="delArtist('${a.id}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderDesigners() {
+  const el = document.getElementById('designer-list');
+  if (!DB.designers.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无打版师</td></tr>`; return; }
+  el.innerHTML = DB.designers.map(d => {
+    const styleCount = DB.styles.filter(s => s.designer === d.name).length;
+    return `<tr>
+      <td>${avatarHTML(d, 'avatar-sm')}</td>
+      <td>${d.name}</td>
+      <td>${styleCount}</td>
+      <td>
+        <button class="btn btn-sm btn-edit" onclick="editDesigner('${d.id}')">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="delDesigner('${d.id}')">删除</button>
       </td>
     </tr>`;
   }).join('');
@@ -2005,7 +2163,7 @@ function toast(msg) {
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function renderAll() {
   fillSelects();
-  renderStyles(); renderArtists(); renderRecordPanel();
+  renderStyles(); renderArtists(); renderDesigners(); renderRecordPanel();
   renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDaily(); renderStyleScore(); renderCross();
   renderAdmins();
   updateLoginStatus();
@@ -2031,7 +2189,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     e.preventDefault();
     const key = this.dataset.tab;
     // 受保护页面：需登录才能访问
-    const protectedTabs = ['record', 'styles', 'artists', 'period', 'monthly', 'cross'];
+    const protectedTabs = ['record', 'styles', 'artists', 'designers', 'period', 'monthly', 'cross'];
     // 管理员设置页：仅主管理员
     if (key === 'admin' && !isMaster()) {
       toast('仅主管理员可访问');
