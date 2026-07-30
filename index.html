@@ -2363,7 +2363,7 @@ function renderMonthly() {
         <td>${fmt(s.score || 0)}</td>
       </tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${designCount} 款</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>${designCount} 款</td><td>${fmt(designScoreRaw)} 分</td></tr>`;
     html += `</tbody></table></div>`;
   }
   html += `</div>`;
@@ -2449,7 +2449,7 @@ function exportMonthlyExcel() {
   d.monthStyles.forEach(s => {
     designRows.push([s.name, s.createDate || '-', fmt(s.score || 0)]);
   });
-  designRows.push(['合计', '-', d.designCount + ' 款']);
+  designRows.push(['合计', d.designCount + ' 款', fmt(d.designScoreRaw) + ' 分']);
   const wsDesign = XLSX.utils.aoa_to_sheet(designRows);
   wsDesign['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(wb, wsDesign, '打版款式明细');
@@ -2503,7 +2503,7 @@ function exportAllMonthlyExcel() {
     d.monthStyles.forEach(s => {
       rows.push([s.name, s.createDate || '-', fmt(s.score || 0)]);
     });
-    rows.push(['合计', '-', d.designCount + ' 款']);
+    rows.push(['合计', d.designCount + ' 款', fmt(d.designScoreRaw) + ' 分']);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 12 }];
@@ -2603,7 +2603,7 @@ function buildDesignerStatHTML(value, month) {
         <td>${fmt(s.score || 0)}</td>
       </tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${totalCount} 款</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>${totalCount} 款</td><td>${fmt(totalScore)} 分</td></tr>`;
     html += `</tbody></table></div>`;
   }
   html += `</div>`;
