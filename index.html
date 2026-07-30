@@ -34,30 +34,43 @@
   }
   .header h1 { font-size: 22px; font-weight: 600; }
   .header p { font-size: 13px; opacity: 0.85; margin-top: 4px; }
-  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  .tabs {
-    display: flex;
-    gap: 4px;
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  .layout { display: flex; gap: 20px; align-items: flex-start; }
+  .sidebar {
+    width: 180px;
+    flex-shrink: 0;
     background: var(--card);
-    padding: 6px;
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    margin-bottom: 20px;
-    overflow-x: auto;
+    padding: 10px;
+    position: sticky;
+    top: 20px;
   }
+  .sidebar-title {
+    font-size: 12px;
+    color: var(--text-light);
+    padding: 8px 12px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+  .tabs { display: flex; flex-direction: column; gap: 4px; }
   .tab {
-    padding: 10px 18px;
+    padding: 12px 14px;
     border: none;
     background: transparent;
     color: var(--text-light);
     cursor: pointer;
     border-radius: 8px;
     font-size: 14px;
-    white-space: nowrap;
+    text-align: left;
     transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .tab:hover { background: var(--primary-light); color: var(--primary); }
   .tab.active { background: var(--primary); color: white; }
+  .content-area { flex: 1; min-width: 0; }
   .panel { display: none; }
   .panel.active { display: block; }
   .card {
@@ -211,6 +224,24 @@
     .form-row { flex-direction: column; align-items: stretch; }
     .form-group input, .form-group select { width: 100%; }
     .header h1 { font-size: 18px; }
+    /* 手机端：侧边栏变为顶部横向滑动标签 */
+    .layout { flex-direction: column; }
+    .sidebar {
+      width: 100%;
+      position: static;
+      padding: 6px;
+    }
+    .sidebar-title { display: none; }
+    .tabs {
+      flex-direction: row;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tab {
+      white-space: nowrap;
+      padding: 10px 14px;
+      justify-content: center;
+    }
   }
 </style>
 </head>
@@ -222,16 +253,21 @@
 
 <div class="container">
   <div style="text-align:right;font-size:12px;margin-bottom:8px;" id="sync-status">🔄 同步中…</div>
-  <div class="tabs">
-    <button class="tab active" data-tab="record">📝 计分录入</button>
-    <button class="tab" data-tab="styles">🎨 款式管理</button>
-    <button class="tab" data-tab="artists">👤 美甲师管理</button>
-    <button class="tab" data-tab="detail">📋 明细记录</button>
-    <button class="tab" data-tab="rank">🏆 排行榜</button>
-    <button class="tab" data-tab="period">📅 时段统计</button>
-    <button class="tab" data-tab="monthly">📆 月度统计</button>
-    <button class="tab" data-tab="cross">🔀 交叉统计</button>
-  </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-title">功能菜单</div>
+      <div class="tabs">
+        <button class="tab active" data-tab="record">📝 计分录入</button>
+        <button class="tab" data-tab="styles">🎨 款式管理</button>
+        <button class="tab" data-tab="artists">👤 美甲师管理</button>
+        <button class="tab" data-tab="detail">📋 明细记录</button>
+        <button class="tab" data-tab="rank">🏆 排行榜</button>
+        <button class="tab" data-tab="period">📅 时段统计</button>
+        <button class="tab" data-tab="monthly">📆 月度统计</button>
+        <button class="tab" data-tab="cross">🔀 交叉统计</button>
+      </div>
+    </aside>
+    <main class="content-area">
 
   <!-- 计分录入 -->
   <div class="panel active" id="panel-record">
@@ -426,6 +462,8 @@
       </div>
     </div>
   </div>
+  </main>
+  </div><!-- /.layout -->
 </div>
 
 <div class="toast" id="toast"></div>
