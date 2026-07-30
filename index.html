@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>美甲师计分系统</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   :root {
     --bg: #f8f3f3;
@@ -558,6 +559,9 @@
         <button class="btn btn-primary btn-sm" onclick="renderDaily()">查看</button>
       </div>
       <div id="daily-content"></div>
+      <div id="daily-download-bar" style="text-align:center;margin-top:16px;display:none;">
+        <button class="btn btn-primary" onclick="downloadDailyImage()">📥 下载统计图片</button>
+      </div>
     </div>
   </div>
 
@@ -1628,11 +1632,13 @@ function renderDaily() {
 
   if (!artistId) {
     container.innerHTML = `<div class="empty">请选择美甲师</div>`;
+    document.getElementById('daily-download-bar').style.display = 'none';
     return;
   }
   const artist = DB.artists.find(a => a.id === artistId);
   if (!artist) {
     container.innerHTML = `<div class="empty">美甲师不存在</div>`;
+    document.getElementById('daily-download-bar').style.display = 'none';
     return;
   }
   const sm = styleMap();
@@ -1740,9 +1746,41 @@ function renderDaily() {
   }
 
   container.innerHTML = html;
+  // 有数据时显示下载按钮
+  document.getElementById('daily-download-bar').style.display = dayRecs.length ? 'block' : 'none';
 }
 
-// ===== 款式计分查询 =====
+// 下载每日统计图片
+function downloadDailyImage() {
+  const target = document.getElementById('daily-content');
+  if (!target) return;
+  toast('正在生成图片…');
+  html2canvas(target, {
+    scale: 2,
+    backgroundColor: '#f8f3f3',
+    useCORS: true
+  }).then(function(canvas) {
+    const artist = document.getElementById('daily-artist');
+    const artistName = artist ? artist.options[artist.selectedIndex].text : '美甲师';
+    const date = document.getElementById('daily-date').value || todayStr();
+    const filename = `每日统计_${artistName}_${date}.png`;
+    // 手机端用 blob 下载，兼容性更好
+    canvas.toBlob(function(blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('图片已保存');
+    }, 'image/png');
+  }).catch(function(err) {
+    console.error(err);
+    toast('生成图片失败，请重试');
+  });
+}
 function renderStyleScore() {
   const el = document.getElementById('stylescore-list');
   if (!DB.styles.length) {
