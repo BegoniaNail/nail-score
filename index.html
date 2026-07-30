@@ -15,6 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="美甲计分统计">
 <meta name="theme-color" content="#783c48">
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #f8f3f3;
@@ -742,6 +743,8 @@
       <div id="designerstat-download-bar" style="text-align:center;margin-top:16px;display:none;">
         <button class="btn btn-primary" onclick="downloadDesignerStatImage()">📥 下载当前打版师</button>
         <button class="btn btn-primary" onclick="downloadAllDesignerStatImages()" style="margin-left:8px;">📥 下载全部打版师</button>
+        <button class="btn" style="margin-left:8px;background:#1a7f37;color:white;" onclick="exportDesignerStatExcel()">📊 导出当前Excel</button>
+        <button class="btn" style="margin-left:8px;background:#1a7f37;color:white;" onclick="exportAllDesignerStatExcel()">📊 导出全部Excel</button>
       </div>
     </div>
   </div>
@@ -2429,6 +2432,121 @@ function downloadAllDesignerStatImages() {
     }, 200);
   }
   next();
+}
+
+// ===== 打版统计 Excel 导出 =====
+// 获取指定人员当月打版款式数据
+function getDesignerStatData(value, month) {
+  const info = resolveDesignerStatPerson(value);
+  if (!info) return null;
+  const seenIds = new Set();
+  const monthStyles = DB.styles.filter(s => {
+    if (s.designer !== info.name) return false;
+    if ((s.createDate || '').substring(0, 7) !== month) return false;
+    if (seenIds.has(s.id)) return false;
+    seenIds.add(s.id);
+    return true;
+  });
+  return { info, monthStyles };
+}
+
+// 导出当前选中人员的 Excel
+function exportDesignerStatExcel() {
+  const value = document.getElementById('designerstat-designer').value;
+  if (!value) return toast('请先选择打版师或美甲师');
+  const month = document.getElementById('designerstat-month').value || currentMonthStr();
+  const result = getDesignerStatData(value, month);
+  if (!result) return toast('人员不存在');
+  const { info, monthStyles } = result;
+  const [y, m] = month.split('-');
+  const monthName = `${y}年${parseInt(m)}月`;
+
+  const wb = XLSX.utils.book_new();
+
+  // 汇总信息行
+  const summaryData = [
+    ['打版统计表'],
+    [],
+    ['姓名', '身份', '统计月份', '打版数量', '合计积分'],
+    [info.name, info.type, monthName, monthStyles.length, +monthStyles.reduce((s, st) => s + (st.score || 0), 0).toFixed(2)]
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  wsSummary['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
+
+  // 明细表
+  const detailRows = [['序号', '款式名称', '打版日期', '积分']];
+  monthStyles.forEach((s, i) => {
+    detailRows.push([i + 1, s.name, s.createDate || '-', +(s.score || 0).toFixed(2)]);
+  });
+  detailRows.push(['', '合计', '', `${monthStyles.length} 款`]);
+  const wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
+  wsDetail['!cols'] = [{ wch: 8 }, { wch: 30 }, { wch: 15 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, wsDetail, '打版明细');
+
+  const filename = `打版统计_${info.name}_${month}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  toast(`已导出 ${info.name} 的 Excel`);
+}
+
+// 导出所有人员的 Excel（每人一个 sheet）
+function exportAllDesignerStatExcel() {
+  const allPeople = [
+    ...DB.designers.map(d => ({ value: 'designer:' + d.id, name: d.name })),
+    ...DB.artists.map(a => ({ value: 'artist:' + a.id, name: a.name }))
+  ];
+  if (!allPeople.length) return toast('暂无人员');
+  const month = document.getElementById('designerstat-month').value || currentMonthStr();
+  const [y, m] = month.split('-');
+  const monthName = `${y}年${parseInt(m)}月`;
+
+  const wb = XLSX.utils.book_new();
+
+  // 汇总总表
+  const summaryRows = [['打版统计汇总表', '', '', '', '']];
+  summaryRows.push(['统计月份', monthName, '', '', '']);
+  summaryRows.push([]);
+  summaryRows.push(['序号', '姓名', '身份', '打版数量', '合计积分']);
+  let hasData = false;
+  allPeople.forEach((p, i) => {
+    const result = getDesignerStatData(p.value, month);
+    if (!result) return;
+    const { info, monthStyles } = result;
+    const totalScore = +monthStyles.reduce((s, st) => s + (st.score || 0), 0).toFixed(2);
+    summaryRows.push([i + 1, info.name, info.type, monthStyles.length, totalScore]);
+    if (monthStyles.length) hasData = true;
+  });
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
+
+  // 每人一个 sheet
+  allPeople.forEach(p => {
+    const result = getDesignerStatData(p.value, month);
+    if (!result) return;
+    const { info, monthStyles } = result;
+    // sheet 名最多 31 字符，且不能含特殊字符
+    let sheetName = info.name.substring(0, 28);
+    // 避免重名
+    let finalName = sheetName;
+    let suffix = 2;
+    while (wb.SheetNames.includes(finalName)) {
+      finalName = sheetName + '_' + suffix;
+      suffix++;
+    }
+    const rows = [['款式名称', '打版日期', '积分']];
+    monthStyles.forEach(s => {
+      rows.push([s.name, s.createDate || '-', +(s.score || 0).toFixed(2)]);
+    });
+    rows.push(['合计', '', `${monthStyles.length} 款`]);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, finalName);
+  });
+
+  const filename = `打版统计_全部_${month}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  toast('已导出全部人员 Excel');
 }
 
 // ===== 每日统计 =====
