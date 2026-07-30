@@ -291,6 +291,7 @@
         <button class="tab" data-tab="styles">🎨 款式管理</button>
         <button class="tab" data-tab="artists">👤 美甲师管理</button>
         <button class="tab" data-tab="detail">📋 明细记录</button>
+        <button class="tab" data-tab="daily">📊 每日统计</button>
         <button class="tab" data-tab="rank">🏆 排行榜</button>
         <button class="tab" data-tab="period">📅 时段统计</button>
         <button class="tab" data-tab="monthly">📆 月度统计</button>
@@ -422,6 +423,22 @@
           <tbody id="detail-list"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- 每日统计 -->
+  <div class="panel" id="panel-daily">
+    <div class="card">
+      <h2>📊 每日统计</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">美甲师查看自己当天的副数、积分及本月累计</p>
+      <div class="filter-bar">
+        <label style="font-size:13px">美甲师：</label>
+        <select id="daily-artist"></select>
+        <label style="font-size:13px">日期：</label>
+        <input type="date" id="daily-date">
+        <button class="btn btn-primary btn-sm" onclick="renderDaily()">查看</button>
+      </div>
+      <div id="daily-content"></div>
     </div>
   </div>
 
@@ -851,6 +868,11 @@ function fillSelects() {
     sel.innerHTML = '<option value="">全部美甲师</option>' + DB.artists.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
     sel.value = cur;
   });
+  // 每日统计美甲师下拉
+  const dA = document.getElementById('daily-artist');
+  const curDA = dA.value;
+  dA.innerHTML = DB.artists.length ? DB.artists.map(a => `<option value="${a.id}">${a.name}</option>`).join('') : '<option value="">请先添加美甲师</option>';
+  if (curDA) dA.value = curDA;
   const fS = document.getElementById('filter-style');
   const curS = fS.value;
   fS.innerHTML = '<option value="">全部款式</option>' + DB.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
@@ -1163,6 +1185,129 @@ function renderMonthly() {
   container.innerHTML = html;
 }
 
+// ===== 每日统计 =====
+function renderDaily() {
+  const artistId = document.getElementById('daily-artist').value;
+  const date = document.getElementById('daily-date').value || todayStr();
+  document.getElementById('daily-date').value = date;
+  const container = document.getElementById('daily-content');
+
+  if (!artistId) {
+    container.innerHTML = `<div class="empty">请选择美甲师</div>`;
+    return;
+  }
+  const artist = DB.artists.find(a => a.id === artistId);
+  if (!artist) {
+    container.innerHTML = `<div class="empty">美甲师不存在</div>`;
+    return;
+  }
+  const sm = styleMap();
+
+  // 当天记录
+  const dayRecs = DB.records.filter(r => r.artistId === artistId && r.date === date);
+  const dayCount = dayRecs.reduce((s,r) => s+r.count, 0);
+  const dayScore = dayRecs.reduce((s,r) => s+r.score, 0);
+
+  // 本月累计（按日期的年月）
+  const month = date.substring(0, 7);
+  const monthRecs = DB.records.filter(r => r.artistId === artistId && r.date.substring(0,7) === month);
+  const monthCount = monthRecs.reduce((s,r) => s+r.count, 0);
+  const monthScore = monthRecs.reduce((s,r) => s+r.score, 0);
+
+  // 格式化日期显示 2026.7.26
+  const [y,m,d] = date.split('-').map(n => parseInt(n));
+  const dateDisplay = `${y}.${m}.${d}`;
+
+  // 当天按款式汇总
+  const styleSummary = {};
+  dayRecs.forEach(r => {
+    if (!styleSummary[r.styleId]) {
+      const s = sm[r.styleId];
+      styleSummary[r.styleId] = { name: s ? s.name : '已删除款式', count: 0, score: 0 };
+    }
+    styleSummary[r.styleId].count += r.count;
+    styleSummary[r.styleId].score += r.score;
+  });
+
+  // 头像
+  const avatar = avatarHTML(artist, 'avatar-lg');
+
+  // 生成统计卡片
+  let html = `
+    <div style="background:linear-gradient(135deg, var(--primary), var(--primary-dark));border-radius:var(--radius);padding:24px;color:white;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        ${avatar}
+        <div>
+          <div style="font-size:20px;font-weight:600;">${artist.name}</div>
+          <div style="font-size:13px;opacity:0.85;">时间：${dateDisplay}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px;opacity:0.85;">当日质检合格数</div>
+          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${dayScore} 分</div>
+        </div>
+        <div>
+          <div style="font-size:13px;opacity:0.85;">本月累计积分</div>
+          <div style="font-size:24px;font-weight:700;">${monthScore.toFixed(2)} 分</div>
+          <div style="font-size:12px;opacity:0.7;">（本月共 ${monthCount} 幅）</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 合格款式明细
+  html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);">
+    <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">当日合格款式明细</h2>`;
+  const styleList = Object.values(styleSummary);
+  if (!styleList.length) {
+    html += `<div class="empty">当天暂无记录</div>`;
+  } else {
+    html += `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">`;
+    styleList.forEach(s => {
+      html += `<span class="badge" style="font-size:14px;padding:6px 14px;">${s.name} ${s.count}副（${s.score.toFixed(2)}分）</span>`;
+    });
+    html += `</div>`;
+    // 明细表
+    html += `<div class="table-wrap"><table>
+      <thead><tr><th>款式</th><th>副数</th><th>积分</th></tr></thead><tbody>`;
+    styleList.forEach(s => {
+      html += `<tr><td>${s.name}</td><td>${s.count}</td><td>${s.score.toFixed(2)}</td></tr>`;
+    });
+    html += `<tr class="total-row"><td>合计</td><td>${dayCount}</td><td>${dayScore.toFixed(2)}</td></tr>`;
+    html += `</tbody></table></div>`;
+  }
+  html += `</div>`;
+
+  // 本月每日趋势（小卡片）
+  const dayMap = {};
+  monthRecs.forEach(r => {
+    if (!dayMap[r.date]) dayMap[r.date] = { count: 0, score: 0 };
+    dayMap[r.date].count += r.count;
+    dayMap[r.date].score += r.score;
+  });
+  const dayKeys = Object.keys(dayMap).sort();
+  if (dayKeys.length > 1) {
+    html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);margin-top:16px;">
+      <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">本月每日明细</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>日期</th><th>副数</th><th>积分</th></tr></thead><tbody>`;
+    dayKeys.forEach(k => {
+      const [yy,mm,dd] = k.split('-').map(n => parseInt(n));
+      const isToday = k === date;
+      html += `<tr ${isToday ? 'style="background:var(--primary-light);font-weight:600;"' : ''}>
+        <td>${yy}.${mm}.${dd}${isToday ? ' （今天）' : ''}</td>
+        <td>${dayMap[k].count}</td>
+        <td>${dayMap[k].score.toFixed(2)}</td>
+      </tr>`;
+    });
+    html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${monthScore.toFixed(2)}</td></tr>`;
+    html += `</tbody></table></div></div>`;
+  }
+
+  container.innerHTML = html;
+}
+
 // ===== 通用 =====
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -1174,7 +1319,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 function renderAll() {
   fillSelects();
   renderStyles(); renderArtists(); renderRecordPanel();
-  renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderCross();
+  renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDaily(); renderCross();
 }
 
 // Tab 切换
@@ -1192,6 +1337,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     if (key === 'rank') renderRank();
     if (key === 'period') renderPeriod();
     if (key === 'monthly') renderMonthly();
+    if (key === 'daily') renderDaily();
     if (key === 'cross') renderCross();
   });
 });
@@ -1220,6 +1366,7 @@ loadLocal();
 seedIfEmpty(); // 本地为空且云端也为空时预置示例
 document.getElementById('rec-date').value = todayStr();
 document.getElementById('monthly-month').value = currentMonthStr();
+document.getElementById('daily-date').value = todayStr();
 renderAll();
 // 异步从云端拉取最新数据（覆盖本地）
 pullCloud().then(ok => {
