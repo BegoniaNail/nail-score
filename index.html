@@ -2328,7 +2328,7 @@ function renderMonthly() {
 
   // 计分款式明细表
   html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);margin-bottom:16px;">
-    <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">当月计分款式明细</h2>`;
+    <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">当月做款计分明细</h2>`;
   const styleList = Object.values(stylesMap);
   if (!styleList.length) {
     html += `<div class="empty">当月暂无计分记录</div>`;
@@ -2442,7 +2442,7 @@ function exportMonthlyExcel() {
   scoreRows.push(['合计', '-', d.totalCount + ' 副', fmt(d.totalScore)]);
   const wsScore = XLSX.utils.aoa_to_sheet(scoreRows);
   wsScore['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 10 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, wsScore, '计分款式明细');
+  XLSX.utils.book_append_sheet(wb, wsScore, '做款计分明细');
 
   // 打版款式明细 sheet
   const designRows = [['款式名称', '打版日期', '积分']];
@@ -2491,7 +2491,7 @@ function exportAllMonthlyExcel() {
     let suffix = 2;
     while (wb.SheetNames.includes(finalName)) { finalName = sheetName + '_' + suffix; suffix++; }
 
-    const rows = [['=== 计分款式明细 ===']];
+    const rows = [['=== 做款计分明细 ===']];
     rows.push(['款式名称', '单副积分', '副数', '小计积分']);
     d.styleList.forEach(s => {
       rows.push([s.name, fmt(s.score || 0), s.count, fmt(s.subScore)]);
