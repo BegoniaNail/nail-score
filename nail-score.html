@@ -53,6 +53,26 @@
     border-bottom: 1px solid var(--border);
     margin-bottom: 8px;
   }
+  .nav-group { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
+  .nav-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary-dark);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 6px 14px 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-group-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    background: var(--primary);
+    border-radius: 2px;
+  }
   .tabs { display: flex; flex-direction: column; gap: 4px; }
   .tab {
     padding: 12px 14px;
@@ -262,6 +282,13 @@
       padding: 6px;
     }
     .sidebar-title { display: none; }
+    .nav-group { margin-bottom: 0; display: contents; }
+    .nav-group-title {
+      white-space: nowrap;
+      padding: 4px 8px;
+      font-size: 10px;
+    }
+    .nav-group-title::before { display: none; }
     .tabs {
       flex-direction: row;
       overflow-x: auto;
@@ -287,15 +314,24 @@
     <aside class="sidebar">
       <div class="sidebar-title">功能菜单</div>
       <div class="tabs">
-        <button class="tab active" data-tab="record">📝 计分录入</button>
-        <button class="tab" data-tab="styles">🎨 款式管理</button>
-        <button class="tab" data-tab="artists">👤 美甲师管理</button>
-        <button class="tab" data-tab="detail">📋 明细记录</button>
-        <button class="tab" data-tab="daily">📊 每日统计</button>
-        <button class="tab" data-tab="rank">🏆 排行榜</button>
-        <button class="tab" data-tab="period">📅 时段统计</button>
-        <button class="tab" data-tab="monthly">📆 月度统计</button>
-        <button class="tab" data-tab="cross">🔀 交叉统计</button>
+        <div class="nav-group">
+          <div class="nav-group-title">录入系统</div>
+          <button class="tab active" data-tab="record">📝 计分录入</button>
+          <button class="tab" data-tab="styles">🎨 款式管理</button>
+          <button class="tab" data-tab="artists">👤 美甲师管理</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">查询系统</div>
+          <button class="tab" data-tab="daily">📊 每日统计</button>
+          <button class="tab" data-tab="detail">📋 明细记录</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">数据统计</div>
+          <button class="tab" data-tab="rank">🏆 排行榜</button>
+          <button class="tab" data-tab="period">📅 时段统计</button>
+          <button class="tab" data-tab="monthly">📆 月度统计</button>
+          <button class="tab" data-tab="cross">🔀 交叉统计</button>
+        </div>
       </div>
     </aside>
     <main class="content-area">
