@@ -1799,11 +1799,6 @@ function buildDailyHTML(artistId, date) {
   if (!styleList.length) {
     html += `<div class="empty">当天暂无记录</div>`;
   } else {
-    html += `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">`;
-    styleList.forEach(s => {
-      html += `<span class="badge" style="font-size:14px;padding:6px 14px;">${s.name} ${s.count}副（${s.score.toFixed(2)}分）</span>`;
-    });
-    html += `</div>`;
     // 明细表
     html += `<div class="table-wrap"><table>
       <thead><tr><th>款式</th><th>副数</th><th>积分</th></tr></thead><tbody>`;
