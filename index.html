@@ -1224,12 +1224,12 @@ function delStyle(id) {
 }
 
 // ===== 美甲师 =====
-// 头像辅助：渲染头像HTML（有图显示图，无图显示首字）
+// 头像辅助：渲染头像HTML（有图显示图，无图显示名字最后一个字）
 function avatarHTML(artist, sizeClass = '') {
   if (artist.avatar) {
     return `<img src="${artist.avatar}" class="avatar ${sizeClass}" alt="${artist.name}">`;
   }
-  const ch = artist.name ? artist.name[0] : '?';
+  const ch = artist.name ? artist.name[artist.name.length - 1] : '?';
   return `<span class="avatar-placeholder ${sizeClass}">${ch}</span>`;
 }
 // 头像辅助：文件转压缩base64（控制大小便于云端存储）
@@ -1295,7 +1295,7 @@ function editArtist(id) {
   document.getElementById('edit-artist-name').value = a.name;
   pendingEditAvatar = '';
   const el = document.getElementById('edit-avatar-preview');
-  el.innerHTML = a.avatar ? `<img src="${a.avatar}" class="avatar">` : `<span class="avatar-placeholder">${a.name[0]}</span>`;
+  el.innerHTML = a.avatar ? `<img src="${a.avatar}" class="avatar">` : `<span class="avatar-placeholder">${a.name[a.name.length - 1]}</span>`;
   document.getElementById('modal-artist').dataset.id = id;
   document.getElementById('modal-artist').classList.add('show');
 }
@@ -1368,7 +1368,7 @@ function editDesigner(id) {
   document.getElementById('edit-designer-name').value = d.name;
   pendingEditDesignerAvatar = '';
   const el = document.getElementById('edit-designer-avatar-preview');
-  el.innerHTML = d.avatar ? `<img src="${d.avatar}" class="avatar">` : `<span class="avatar-placeholder">${d.name[0]}</span>`;
+  el.innerHTML = d.avatar ? `<img src="${d.avatar}" class="avatar">` : `<span class="avatar-placeholder">${d.name[d.name.length - 1]}</span>`;
   document.getElementById('modal-designer').dataset.id = id;
   document.getElementById('modal-designer').classList.add('show');
 }
