@@ -2238,7 +2238,9 @@ function renderMonthly() {
     stylesMap[r.styleId].count += r.count;
     stylesMap[r.styleId].subScore += r.score;
   });
-  totalScore = fmt(totalScore);
+  // 汇总信息
+  document.getElementById('monthly-summary').textContent =
+    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${fmt(grandTotalScoreRaw)} 分 · 打版 ${designCount} 款`;
 
   // 打版数据：该美甲师作为打版师当月打版的款式
   const seenIds = new Set();
@@ -2250,13 +2252,14 @@ function renderMonthly() {
     return true;
   });
   const designCount = monthStyles.length;
-  const designScore = fmt(monthStyles.reduce((s, st) => s + (st.score || 0), 0));
-  // 当月总积分 = 当月做款积分 + 打版合计积分 × 2
-  const grandTotalScore = fmt(totalScore + designScore * 2);
+  // 保留原始精度，不在累加过程中截断（fmt 只用于显示）
+  const designScoreRaw = monthStyles.reduce((s, st) => s + (st.score || 0), 0);
+  // 当月总积分 = 打版合计积分 × 2 + 当月做款积分（保留原始精度）
+  const grandTotalScoreRaw = designScoreRaw * 2 + totalScore;
 
   // 汇总信息
   document.getElementById('monthly-summary').textContent =
-    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${fmt(grandTotalScore)} 分 · 打版 ${designCount} 款`;
+    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${fmt(grandTotalScoreRaw)} 分 · 打版 ${designCount} 款`;
 
   // 信息卡片
   let html = `
@@ -2286,12 +2289,12 @@ function renderMonthly() {
           </div>
           <div>
             <div style="font-size:13px;opacity:0.85;">打版合计积分</div>
-            <div style="font-size:24px;font-weight:700;">${fmt(designScore)} 分</div>
+            <div style="font-size:24px;font-weight:700;">${fmt(designScoreRaw)} 分</div>
           </div>
         </div>
         <div style="background:rgba(255,215,0,0.95);color:var(--primary-dark);padding:10px 16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);align-self:flex-start;">
           <div style="font-size:13px;opacity:0.9;font-weight:600;">⭐ 当月总积分</div>
-          <div style="font-size:26px;font-weight:800;color:var(--primary-dark);">${fmt(grandTotalScore)} 分</div>
+          <div style="font-size:26px;font-weight:800;color:var(--primary-dark);">${fmt(grandTotalScoreRaw)} 分</div>
         </div>
       </div>
     </div>
