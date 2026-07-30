@@ -1005,10 +1005,9 @@ function renderAdmins() {
   if (!DB.admins.length) { el.innerHTML = `<tr><td colspan="3" class="empty">暂无管理员</td></tr>`; return; }
   el.innerHTML = DB.admins.map(a => {
     const role = a.isMaster ? '<span class="badge" style="background:var(--primary);color:white;">主管理员</span>' : '<span class="badge">管理员</span>';
-    const actions = a.isMaster ? '-' : `
-      <button class="btn btn-sm btn-edit" onclick="editAdmin('${a.id}')">编辑</button>
-      <button class="btn btn-sm btn-danger" onclick="delAdmin('${a.id}')">删除</button>`;
-    return `<tr><td>${a.name}</td><td>${role}</td><td>${actions}</td></tr>`;
+    const editBtn = `<button class="btn btn-sm btn-edit" onclick="editAdmin('${a.id}')">编辑</button>`;
+    const delBtn = a.isMaster ? '' : `<button class="btn btn-sm btn-danger" onclick="delAdmin('${a.id}')">删除</button>`;
+    return `<tr><td>${a.name}</td><td>${role}</td><td>${editBtn} ${delBtn}</td></tr>`;
   }).join('');
 }
 
