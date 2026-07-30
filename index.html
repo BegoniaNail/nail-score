@@ -427,6 +427,7 @@
             <button class="tab" data-tab="rank">🏆 月度排行榜</button>
             <button class="tab" data-tab="period">📅 时段统计</button>
             <button class="tab" data-tab="monthly">📆 月度统计</button>
+            <button class="tab" data-tab="designerstat">👠 打版统计</button>
             <button class="tab" data-tab="cross">🔀 交叉统计</button>
           </div>
         </div>
@@ -708,6 +709,23 @@
         <span id="monthly-summary" style="margin-left:auto;font-size:13px;color:var(--text-light)"></span>
       </div>
       <div id="monthly-content"></div>
+    </div>
+  </div>
+
+  <!-- 打版统计 -->
+  <div class="panel" id="panel-designerstat">
+    <div class="card">
+      <h2>👠 打版统计</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">按月查看每位打版师的打版数量、对应款式及积分</p>
+      <div class="filter-bar">
+        <label style="font-size:13px">选择月份：</label>
+        <input type="month" id="designerstat-month">
+        <button class="btn btn-primary btn-sm" onclick="renderDesignerStat()">查看</button>
+        <button class="btn btn-sm" style="background:#eee" onclick="prevDesignerMonth()">◀ 上月</button>
+        <button class="btn btn-sm" style="background:#eee" onclick="nextDesignerMonth()">下月 ▶</button>
+        <span id="designerstat-summary" style="margin-left:auto;font-size:13px;color:var(--text-light)"></span>
+      </div>
+      <div id="designerstat-content"></div>
     </div>
   </div>
 
@@ -1891,6 +1909,95 @@ function renderMonthly() {
   container.innerHTML = html;
 }
 
+// ===== 打版统计 =====
+function prevDesignerMonth() {
+  const inp = document.getElementById('designerstat-month');
+  const [y,m] = inp.value.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  inp.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  renderDesignerStat();
+}
+function nextDesignerMonth() {
+  const inp = document.getElementById('designerstat-month');
+  const [y,m] = inp.value.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  inp.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  renderDesignerStat();
+}
+function renderDesignerStat() {
+  const month = document.getElementById('designerstat-month').value || currentMonthStr();
+  document.getElementById('designerstat-month').value = month;
+  const sm = styleMap();
+
+  // 筛选当月有打版师关联的款式
+  const monthStyles = DB.styles.filter(s => (s.createDate || '').substring(0, 7) === month && s.designer);
+
+  // 按打版师汇总
+  const designerData = {};
+  DB.designers.forEach(d => {
+    designerData[d.id] = { name: d.name, designer: d, totalCount: 0, totalScore: 0, styles: {} };
+  });
+  monthStyles.forEach(s => {
+    const d = DB.designers.find(x => x.name === s.designer);
+    if (!d || !designerData[d.id]) return;
+    const dd = designerData[d.id];
+    dd.totalCount += 1; // 打版数量 = 款式数
+    dd.totalScore += (s.score || 0);
+    dd.styles[s.id] = { name: s.name, score: s.score || 0, createDate: s.createDate || '' };
+  });
+
+  // 按打版数量排序
+  const ranked = Object.values(designerData)
+    .filter(d => d.totalCount > 0)
+    .sort((a,b) => b.totalCount - a.totalCount || b.totalScore - a.totalScore);
+
+  const [y,m] = month.split('-');
+  const monthName = `${y}年${parseInt(m)}月`;
+
+  // 汇总
+  const grandCount = ranked.reduce((s,d) => s+d.totalCount, 0);
+  const grandScore = ranked.reduce((s,d) => s+d.totalScore, 0);
+  document.getElementById('designerstat-summary').textContent =
+    ranked.length ? `${monthName} · 共 ${ranked.length} 位打版师 · ${grandCount} 个款式 · ${grandScore.toFixed(2)} 分` : `${monthName} · 暂无数据`;
+
+  const container = document.getElementById('designerstat-content');
+  if (!ranked.length) {
+    container.innerHTML = `<div class="empty">${monthName} 暂无打版记录</div>`;
+    return;
+  }
+
+  // 顶部概览卡片
+  let cardsHtml = '<div class="stat-grid" style="margin-bottom:16px;">';
+  ranked.slice(0,3).forEach((d,i) => {
+    const medal = i===0 ? '🥇' : i===1 ? '🥈' : '🥉';
+    cardsHtml += `<div class="stat-card"><div class="num" style="font-size:22px;">${medal}</div><div style="margin:6px 0;">${avatarHTML(d.designer, 'avatar-lg')}</div><div style="font-weight:600;margin:4px 0;">${d.name}</div><div class="num" style="font-size:22px;color:var(--primary);">${d.totalCount}</div><div class="label">款式 · ${d.totalScore.toFixed(1)}分</div></div>`;
+  });
+  cardsHtml += '</div>';
+
+  // 详细表
+  let html = cardsHtml;
+  html += `<div class="table-wrap"><table>
+    <thead><tr><th>排名</th><th>打版师</th><th>打版数量</th><th>总积分</th><th>款式明细</th></tr></thead><tbody>`;
+  ranked.forEach((d, i) => {
+    const rank = i + 1;
+    const cls = rank <= 3 ? `rank-${rank}` : '';
+    const styleDetail = Object.values(d.styles).map(s =>
+      `<span class="badge" style="margin:2px;">${s.name}（${s.score.toFixed(2)}分）</span>`
+    ).join('');
+    html += `<tr>
+      <td class="${cls}">${rank<=3?['🥇','🥈','🥉'][rank-1]:rank}</td>
+      <td><div class="avatar-cell">${avatarHTML(d.designer, 'avatar-sm')} <span style="font-weight:600;">${d.name}</span></div></td>
+      <td>${d.totalCount}</td>
+      <td><strong style="color:var(--primary);">${d.totalScore.toFixed(2)}</strong></td>
+      <td style="line-height:2.2;">${styleDetail || '-'}</td>
+    </tr>`;
+  });
+  html += `<tr class="total-row"><td colspan="2">合计</td><td>${grandCount}</td><td>${grandScore.toFixed(2)}</td><td>-</td></tr>`;
+  html += '</tbody></table></div>';
+
+  container.innerHTML = html;
+}
+
 // ===== 每日统计 =====
 function buildDailyHTML(artistId, date) {
   const artist = DB.artists.find(a => a.id === artistId);
@@ -2164,7 +2271,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 function renderAll() {
   fillSelects();
   renderStyles(); renderArtists(); renderDesigners(); renderRecordPanel();
-  renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDaily(); renderStyleScore(); renderCross();
+  renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDesignerStat(); renderDaily(); renderStyleScore(); renderCross();
   renderAdmins();
   updateLoginStatus();
 }
@@ -2189,7 +2296,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     e.preventDefault();
     const key = this.dataset.tab;
     // 受保护页面：需登录才能访问
-    const protectedTabs = ['record', 'styles', 'artists', 'designers', 'period', 'monthly', 'cross'];
+    const protectedTabs = ['record', 'styles', 'artists', 'designers', 'period', 'monthly', 'designerstat', 'cross'];
     // 管理员设置页：仅主管理员
     if (key === 'admin' && !isMaster()) {
       toast('仅主管理员可访问');
@@ -2211,6 +2318,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     if (key === 'rank') renderRank();
     if (key === 'period') renderPeriod();
     if (key === 'monthly') renderMonthly();
+    if (key === 'designerstat') renderDesignerStat();
     if (key === 'daily') renderDaily();
     if (key === 'stylescore') renderStyleScore();
     if (key === 'cross') renderCross();
@@ -2246,6 +2354,7 @@ loadLocal();
 seedIfEmpty(); // 本地为空且云端也为空时预置示例
 document.getElementById('rec-date').value = todayStr();
 document.getElementById('monthly-month').value = currentMonthStr();
+document.getElementById('designerstat-month').value = currentMonthStr();
 document.getElementById('rank-month').value = currentMonthStr();
 document.getElementById('daily-date').value = todayStr();
 renderAll();
