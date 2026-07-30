@@ -1742,13 +1742,13 @@ function buildDailyHTML(artistId, date) {
   // 当天记录
   const dayRecs = DB.records.filter(r => r.artistId === artistId && r.date === date);
   const dayCount = dayRecs.reduce((s,r) => s+r.count, 0);
-  const dayScore = dayRecs.reduce((s,r) => s+r.score, 0);
+  const dayScore = +dayRecs.reduce((s,r) => s+r.score, 0).toFixed(2);
 
   // 本月累计（按日期的年月）
   const month = date.substring(0, 7);
   const monthRecs = DB.records.filter(r => r.artistId === artistId && r.date.substring(0,7) === month);
   const monthCount = monthRecs.reduce((s,r) => s+r.count, 0);
-  const monthScore = monthRecs.reduce((s,r) => s+r.score, 0);
+  const monthScore = +monthRecs.reduce((s,r) => s+r.score, 0).toFixed(2);
 
   // 格式化日期显示 2026.7.26
   const [y,m,d] = date.split('-').map(n => parseInt(n));
@@ -1762,7 +1762,7 @@ function buildDailyHTML(artistId, date) {
       styleSummary[r.styleId] = { name: s ? s.name : '已删除款式', count: 0, score: 0 };
     }
     styleSummary[r.styleId].count += r.count;
-    styleSummary[r.styleId].score += r.score;
+    styleSummary[r.styleId].score = +(styleSummary[r.styleId].score + r.score).toFixed(2);
   });
 
   // 头像
@@ -1781,7 +1781,7 @@ function buildDailyHTML(artistId, date) {
       <div style="display:flex;gap:24px;flex-wrap:wrap;">
         <div>
           <div style="font-size:13px;opacity:0.85;">当日质检合格数</div>
-          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${dayScore} 分</div>
+          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${dayScore.toFixed(2)} 分</div>
         </div>
         <div>
           <div style="font-size:13px;opacity:0.85;">本月累计积分</div>
@@ -1820,7 +1820,7 @@ function buildDailyHTML(artistId, date) {
   monthRecs.forEach(r => {
     if (!dayMap[r.date]) dayMap[r.date] = { count: 0, score: 0 };
     dayMap[r.date].count += r.count;
-    dayMap[r.date].score += r.score;
+    dayMap[r.date].score = +(dayMap[r.date].score + r.score).toFixed(2);
   });
   const dayKeys = Object.keys(dayMap).sort();
   if (dayKeys.length > 1) {
