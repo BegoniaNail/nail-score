@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>美甲师计分系统</title>
+<style>
+  :root {
+    --bg: #faf6f2;
+    --card: #ffffff;
+    --primary: #d97a8b;
+    --primary-dark: #c25c70;
+    --primary-light: #fce8ec;
+    --text: #3a2e2e;
+    --text-light: #8a7a7a;
+    --border: #f0e0e0;
+    --success: #7ec99c;
+    --warning: #f0b870;
+    --shadow: 0 2px 12px rgba(217, 122, 139, 0.08);
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .header {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    padding: 20px 24px;
+    box-shadow: var(--shadow);
+  }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .header p { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--card);
+    padding: 6px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 18px;
+    border: none;
+    background: transparent;
+    color: var(--text-light);
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 14px;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .tab:hover { background: var(--primary-light); color: var(--primary); }
+  .tab.active { background: var(--primary); color: white; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--primary-light);
+    color: var(--primary-dark);
+  }
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 12px;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 12px; color: var(--text-light); }
+  input, select, textarea {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus { border-color: var(--primary); }
+  input[type="number"] { width: 100px; }
+  input[type="date"] { width: 160px; }
+  select { min-width: 140px; }
+  .btn {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-danger { background: #f5e0e0; color: #c0505a; }
+  .btn-danger:hover { background: #eccaca; }
+  .btn-edit { background: var(--primary-light); color: var(--primary-dark); }
+  .btn-edit:hover { background: #f5d5dc; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    padding: 10px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:hover { background: #fcf5f7; }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .stat-card .num { font-size: 28px; font-weight: 700; color: var(--primary); }
+  .stat-card .label { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+  }
+  .rank-1 { color: #e0a030; font-weight: 700; }
+  .rank-2 { color: #a0a0a0; font-weight: 700; }
+  .rank-3 { color: #cd7f5c; font-weight: 700; }
+  .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-light);
+    font-size: 14px;
+  }
+  .table-wrap { max-height: 500px; overflow-y: auto; border-radius: 8px; }
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: white;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 0.9; }
+  .modal-mask {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: white;
+    border-radius: var(--radius);
+    padding: 24px;
+    width: 90%;
+    max-width: 420px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  }
+  .modal h3 { margin-bottom: 16px; color: var(--primary-dark); }
+  .modal .form-group { margin-bottom: 14px; }
+  .modal .form-group input { width: 100%; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  .filter-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin-bottom: 14px; padding: 12px; background: var(--primary-light);
+    border-radius: 8px;
+  }
+  .filter-bar select, .filter-bar input { background: white; }
+  .total-row td { font-weight: 700; background: var(--primary-light) !important; color: var(--primary-dark); }
+  .cross-table th, .cross-table td { text-align: center; }
+  .cross-table td:first-child, .cross-table th:first-child { text-align: left; font-weight: 600; }
+  @media (max-width: 600px) {
+    .form-row { flex-direction: column; align-items: stretch; }
+    .form-group input, .form-group select { width: 100%; }
+    .header h1 { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>💅 美甲师计分系统</h1>
+  <p>按款式自动计分 · 多维度统计 · 云端同步</p>
+</div>
+
+<div class="container">
+  <div style="text-align:right;font-size:12px;margin-bottom:8px;" id="sync-status">🔄 同步中…</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="record">📝 计分录入</button>
+    <button class="tab" data-tab="styles">🎨 款式管理</button>
+    <button class="tab" data-tab="artists">👤 美甲师管理</button>
+    <button class="tab" data-tab="detail">📋 明细记录</button>
+    <button class="tab" data-tab="rank">🏆 排行榜</button>
+    <button class="tab" data-tab="period">📅 时段统计</button>
+    <button class="tab" data-tab="monthly">📆 月度统计</button>
+    <button class="tab" data-tab="cross">🔀 交叉统计</button>
+  </div>
+
+  <!-- 计分录入 -->
+  <div class="panel active" id="panel-record">
+    <div class="card">
+      <h2>新增计分记录</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>美甲师</label>
+          <select id="rec-artist"></select>
+        </div>
+        <div class="form-group">
+          <label>日期</label>
+          <input type="date" id="rec-date">
+        </div>
+        <div class="form-group">
+          <label>备注（可选）</label>
+          <input type="text" id="rec-note" placeholder="可选">
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label style="font-size:13px;color:var(--text-light);">本次做的款式（可添加多个）</label>
+          <button class="btn btn-sm btn-edit" onclick="addStyleRow()">+ 添加款式行</button>
+        </div>
+        <table id="rec-rows-table" style="margin-bottom:10px;">
+          <thead><tr><th style="width:45%;">款式</th><th style="width:25%;">数量（副）</th><th style="width:20%;">小计</th><th style="width:10%;">操作</th></tr></thead>
+          <tbody id="rec-rows"></tbody>
+        </table>
+        <p id="rec-preview" style="font-size:13px;color:var(--text-light);"></p>
+      </div>
+
+      <button class="btn btn-primary" onclick="addRecord()" style="margin-top:8px;">✓ 确认录入</button>
+    </div>
+
+    <div class="stat-grid" id="rec-stats"></div>
+
+    <div class="card">
+      <h2>最近录入（最新 10 条）</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>时间</th><th>美甲师</th><th>款式</th><th>数量</th><th>积分</th><th>备注</th><th>操作</th></tr></thead>
+          <tbody id="rec-recent"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 款式管理 -->
+  <div class="panel" id="panel-styles">
+    <div class="card">
+      <h2>添加 / 编辑款式</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>款式名称</label>
+          <input type="text" id="style-name" placeholder="如：法式美甲">
+        </div>
+        <div class="form-group">
+          <label>每副积分</label>
+          <input type="number" id="style-score" value="1" min="0.1" step="0.1">
+        </div>
+        <button class="btn btn-primary" onclick="addStyle()">+ 添加款式</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>款式列表</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>款式名称</th><th>每副积分</th><th>操作</th></tr></thead>
+          <tbody id="style-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 美甲师管理 -->
+  <div class="panel" id="panel-artists">
+    <div class="card">
+      <h2>添加美甲师</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>美甲师姓名</label>
+          <input type="text" id="artist-name" placeholder="如：小美">
+        </div>
+        <button class="btn btn-primary" onclick="addArtist()">+ 添加</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>美甲师列表</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>姓名</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
+          <tbody id="artist-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 明细记录 -->
+  <div class="panel" id="panel-detail">
+    <div class="card">
+      <h2>明细查询</h2>
+      <div class="filter-bar">
+        <select id="filter-artist"><option value="">全部美甲师</option></select>
+        <select id="filter-style"><option value="">全部款式</option></select>
+        <input type="date" id="filter-from">
+        <span>至</span>
+        <input type="date" id="filter-to">
+        <button class="btn btn-primary btn-sm" onclick="renderDetail()">查询</button>
+        <button class="btn btn-sm" style="background:#eee" onclick="clearDetailFilter()">重置</button>
+        <span id="detail-summary" style="margin-left:auto;font-size:13px;color:var(--text-light)"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>日期</th><th>美甲师</th><th>款式</th><th>数量</th><th>积分</th><th>备注</th><th>操作</th></tr></thead>
+          <tbody id="detail-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 排行榜 -->
+  <div class="panel" id="panel-rank">
+    <div class="card">
+      <h2>积分排行榜</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>排名</th><th>美甲师</th><th>总副数</th><th>总积分</th></tr></thead>
+          <tbody id="rank-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 时段统计 -->
+  <div class="panel" id="panel-period">
+    <div class="card">
+      <h2>按时间段统计</h2>
+      <div class="filter-bar">
+        <select id="period-type">
+          <option value="day">按日</option>
+          <option value="week">按周</option>
+          <option value="month">按月</option>
+        </select>
+        <input type="date" id="period-from">
+        <span>至</span>
+        <input type="date" id="period-to">
+        <select id="period-artist"><option value="">全部美甲师</option></select>
+        <button class="btn btn-primary btn-sm" onclick="renderPeriod()">统计</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>时间段</th><th>副数</th><th>积分</th></tr></thead>
+          <tbody id="period-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 月度统计 -->
+  <div class="panel" id="panel-monthly">
+    <div class="card">
+      <h2>📆 月度统计</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">按月查看每位美甲师的总积分、总副数、款式明细，并按积分从高到低排行</p>
+      <div class="filter-bar">
+        <label style="font-size:13px">选择月份：</label>
+        <input type="month" id="monthly-month">
+        <button class="btn btn-primary btn-sm" onclick="renderMonthly()">查看</button>
+        <button class="btn btn-sm" style="background:#eee" onclick="prevMonth()">◀ 上月</button>
+        <button class="btn btn-sm" style="background:#eee" onclick="nextMonth()">下月 ▶</button>
+        <span id="monthly-summary" style="margin-left:auto;font-size:13px;color:var(--text-light)"></span>
+      </div>
+      <div id="monthly-content"></div>
+    </div>
+  </div>
+
+  <!-- 交叉统计 -->
+  <div class="panel" id="panel-cross">
+    <div class="card">
+      <h2>款式 × 美甲师 交叉统计</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">显示每位美甲师做过的各款式副数与积分</p>
+      <div class="filter-bar">
+        <label style="font-size:13px">显示：</label>
+        <select id="cross-mode">
+          <option value="count">副数</option>
+          <option value="score">积分</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="renderCross()">生成</button>
+      </div>
+      <div class="table-wrap">
+        <table class="cross-table" id="cross-table"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-mask" id="modal-style">
+  <div class="modal">
+    <h3>编辑款式</h3>
+    <div class="form-group">
+      <label>款式名称</label>
+      <input type="text" id="edit-style-name">
+    </div>
+    <div class="form-group">
+      <label>每副积分</label>
+      <input type="number" id="edit-style-score" min="0.1" step="0.1">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-style')">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="saveStyleEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-artist">
+  <div class="modal">
+    <h3>编辑美甲师</h3>
+    <div class="form-group">
+      <label>姓名</label>
+      <input type="text" id="edit-artist-name">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-artist')">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="saveArtistEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 数据层（云端同步 + 本地缓存）=====
+const KEY = 'nailScoreData_v1';
+const BIN_ID = '019fafca-3462-704c-9eed-3db463b6f5e1';
+const API = 'https://jsonblob.com/api/jsonBlob/' + BIN_ID;
+let DB = { styles: [], artists: [], records: [] };
+let SYNCING = false;
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) DB = JSON.parse(raw);
+  } catch(e) { console.error(e); }
+  if (!DB.styles) DB.styles = [];
+  if (!DB.artists) DB.artists = [];
+  if (!DB.records) DB.records = [];
+}
+function saveLocal() { localStorage.setItem(KEY, JSON.stringify(DB)); }
+
+// 云端拉取
+async function pullCloud() {
+  try {
+    setSync('syncing');
+    const res = await fetch(API, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('pull failed: ' + res.status);
+    const data = await res.json();
+    if (data && data.styles) {
+      DB = data;
+      saveLocal();
+      renderAll();
+    }
+    setSync('ok');
+    return true;
+  } catch(e) {
+    console.error('pull error', e);
+    setSync('offline');
+    return false;
+  }
+}
+// 云端推送
+async function pushCloud() {
+  try {
+    setSync('syncing');
+    const res = await fetch(API, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(DB)
+    });
+    if (!res.ok) throw new Error('push failed: ' + res.status);
+    setSync('ok');
+    return true;
+  } catch(e) {
+    console.error('push error', e);
+    setSync('offline');
+    return false;
+  }
+}
+// 保存 = 本地立即存 + 异步推云端
+function save() {
+  saveLocal();
+  if (SYNCING) return; // 防止重复推送
+  pushCloud();
+}
+function setSync(state) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const map = {
+    syncing: { t: '🔄 同步中…', c: '#f0b870' },
+    ok: { t: '☁️ 已同步', c: '#7ec99c' },
+    offline: { t: '⚠️ 离线模式（仅本地）', c: '#c0505a' }
+  };
+  const m = map[state] || map.ok;
+  el.textContent = m.t;
+  el.style.color = m.c;
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// ===== 款式 =====
+function addStyle() {
+  const name = document.getElementById('style-name').value.trim();
+  const score = parseFloat(document.getElementById('style-score').value);
+  if (!name) return toast('请输入款式名称');
+  if (isNaN(score) || score <= 0) return toast('积分须大于0');
+  if (DB.styles.some(s => s.name === name)) return toast('款式已存在');
+  DB.styles.push({ id: uid(), name, score });
+  save();
+  document.getElementById('style-name').value = '';
+  document.getElementById('style-score').value = '1';
+  toast('款式已添加');
+  renderAll();
+}
+function editStyle(id) {
+  const s = DB.styles.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('edit-style-name').value = s.name;
+  document.getElementById('edit-style-score').value = s.score;
+  document.getElementById('modal-style').dataset.id = id;
+  document.getElementById('modal-style').classList.add('show');
+}
+function saveStyleEdit() {
+  const id = document.getElementById('modal-style').dataset.id;
+  const s = DB.styles.find(x => x.id === id);
+  if (!s) return;
+  const name = document.getElementById('edit-style-name').value.trim();
+  const score = parseFloat(document.getElementById('edit-style-score').value);
+  if (!name) return toast('请输入名称');
+  if (isNaN(score) || score <= 0) return toast('积分须大于0');
+  s.name = name; s.score = score;
+  save(); closeModal('modal-style');
+  toast('已保存'); renderAll();
+}
+function delStyle(id) {
+  const s = DB.styles.find(x => x.id === id);
+  if (!s) return;
+  const used = DB.records.filter(r => r.styleId === id).length;
+  if (used > 0 && !confirm(`该款式已有 ${used} 条记录，删除后相关记录也会清除，确定？`)) return;
+  DB.styles = DB.styles.filter(x => x.id !== id);
+  DB.records = DB.records.filter(r => r.styleId !== id);
+  save(); toast('已删除'); renderAll();
+}
+
+// ===== 美甲师 =====
+function addArtist() {
+  const name = document.getElementById('artist-name').value.trim();
+  if (!name) return toast('请输入姓名');
+  if (DB.artists.some(a => a.name === name)) return toast('美甲师已存在');
+  DB.artists.push({ id: uid(), name });
+  save();
+  document.getElementById('artist-name').value = '';
+  toast('美甲师已添加'); renderAll();
+}
+function editArtist(id) {
+  const a = DB.artists.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('edit-artist-name').value = a.name;
+  document.getElementById('modal-artist').dataset.id = id;
+  document.getElementById('modal-artist').classList.add('show');
+}
+function saveArtistEdit() {
+  const id = document.getElementById('modal-artist').dataset.id;
+  const a = DB.artists.find(x => x.id === id);
+  if (!a) return;
+  const name = document.getElementById('edit-artist-name').value.trim();
+  if (!name) return toast('请输入姓名');
+  a.name = name;
+  save(); closeModal('modal-artist');
+  toast('已保存'); renderAll();
+}
+function delArtist(id) {
+  const used = DB.records.filter(r => r.artistId === id).length;
+  if (used > 0 && !confirm(`该美甲师有 ${used} 条记录，删除后相关记录也会清除，确定？`)) return;
+  DB.artists = DB.artists.filter(x => x.id !== id);
+  DB.records = DB.records.filter(r => r.artistId !== id);
+  save(); toast('已删除'); renderAll();
+}
+
+// ===== 计分录入（支持多款式批量）=====
+let styleRows = []; // 当前录入区已添加的款式行
+
+function addStyleRow(styleId = '', count = 1) {
+  if (!DB.styles.length) return toast('请先在"款式管理"中添加款式');
+  styleRows.push({ styleId: styleId || DB.styles[0].id, count });
+  renderStyleRows();
+}
+function delStyleRow(idx) {
+  styleRows.splice(idx, 1);
+  renderStyleRows();
+}
+function renderStyleRows() {
+  const tbody = document.getElementById('rec-rows');
+  if (!styleRows.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty">点击右上角"+ 添加款式行"添加本次做的款式</td></tr>`;
+    updatePreview();
+    return;
+  }
+  const opts = DB.styles.map(s => `<option value="${s.id}">${s.name}（${s.score}分/副）</option>`).join('');
+  tbody.innerHTML = styleRows.map((r, i) => {
+    const s = DB.styles.find(x => x.id === r.styleId);
+    const sub = s ? (s.score * (r.count || 0)).toFixed(2) : '0';
+    return `<tr>
+      <td><select onchange="updateRowStyle(${i}, this.value)">${DB.styles.map(s2 => `<option value="${s2.id}" ${s2.id===r.styleId?'selected':''}>${s2.name}（${s2.score}分/副）</option>`).join('')}</select></td>
+      <td><input type="number" value="${r.count}" min="1" step="1" oninput="updateRowCount(${i}, this.value)" style="width:80px;"></td>
+      <td style="color:var(--primary-dark);font-weight:600;">${sub}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="delStyleRow(${i})">删除</button></td>
+    </tr>`;
+  }).join('');
+  updatePreview();
+}
+function updateRowStyle(i, val) { styleRows[i].styleId = val; renderStyleRows(); }
+function updateRowCount(i, val) {
+  styleRows[i].count = Math.max(1, parseInt(val) || 1);
+  renderStyleRows();
+}
+
+function addRecord() {
+  const artistId = document.getElementById('rec-artist').value;
+  let date = document.getElementById('rec-date').value;
+  const note = document.getElementById('rec-note').value.trim();
+  if (!artistId) return toast('请选择美甲师');
+  if (!date) { date = todayStr(); document.getElementById('rec-date').value = date; }
+  if (!styleRows.length) return toast('请至少添加一个款式行');
+
+  let added = 0, totalScore = 0;
+  const ts = Date.now();
+  styleRows.forEach(r => {
+    const count = parseInt(r.count);
+    if (!count || count < 1) return;
+    const style = DB.styles.find(s => s.id === r.styleId);
+    if (!style) return;
+    const score = +(style.score * count).toFixed(2);
+    DB.records.push({
+      id: uid(), artistId, styleId: r.styleId, count, score, date, note, ts: ts + added
+    });
+    added++;
+    totalScore += score;
+  });
+  if (added === 0) return toast('没有有效的款式行');
+
+  save();
+  // 清空款式行，保留美甲师和日期方便继续录下一位
+  styleRows = [];
+  document.getElementById('rec-note').value = '';
+  renderStyleRows();
+  toast(`录入成功：${added} 条记录，共 ${totalScore.toFixed(2)} 分`);
+  renderAll();
+}
+function delRecord(id) {
+  DB.records = DB.records.filter(r => r.id !== id);
+  save(); toast('已删除'); renderAll();
+}
+
+// ===== 渲染 =====
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function styleMap() { return Object.fromEntries(DB.styles.map(s => [s.id, s])); }
+function artistMap() { return Object.fromEntries(DB.artists.map(a => [a.id, a])); }
+
+function fillSelects() {
+  const aSel = document.getElementById('rec-artist');
+  aSel.innerHTML = DB.artists.length ? DB.artists.map(a => `<option value="${a.id}">${a.name}</option>`).join('') : '<option value="">请先添加美甲师</option>';
+
+  // 筛选下拉
+  const fA = document.getElementById('filter-artist');
+  const pA = document.getElementById('period-artist');
+  [fA, pA].forEach(sel => {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">全部美甲师</option>' + DB.artists.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    sel.value = cur;
+  });
+  const fS = document.getElementById('filter-style');
+  const curS = fS.value;
+  fS.innerHTML = '<option value="">全部款式</option>' + DB.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  fS.value = curS;
+
+  // 刷新款式行的下拉选项（如果已添加了行）
+  if (styleRows.length) renderStyleRows();
+  else renderStyleRows();
+  updatePreview();
+}
+function updatePreview() {
+  const el = document.getElementById('rec-preview');
+  if (!styleRows.length) { el.textContent = ''; return; }
+  let total = 0, valid = 0;
+  styleRows.forEach(r => {
+    const s = DB.styles.find(x => x.id === r.styleId);
+    const c = parseInt(r.count) || 0;
+    if (s && c > 0) { total += s.score * c; valid++; }
+  });
+  if (valid > 0) {
+    el.innerHTML = `共 <strong style="color:var(--primary)">${valid}</strong> 个款式，预计总积分：<strong style="color:var(--primary)">${total.toFixed(2)}</strong> 分`;
+  } else {
+    el.textContent = '';
+  }
+}
+
+function renderStyles() {
+  const el = document.getElementById('style-list');
+  if (!DB.styles.length) { el.innerHTML = `<tr><td colspan="3" class="empty">暂无款式，请先添加</td></tr>`; return; }
+  el.innerHTML = DB.styles.map(s => `
+    <tr>
+      <td><span class="badge">${s.name}</span></td>
+      <td>${s.score}</td>
+      <td>
+        <button class="btn btn-sm btn-edit" onclick="editStyle('${s.id}')">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="delStyle('${s.id}')">删除</button>
+      </td>
+    </tr>`).join('');
+}
+
+function renderArtists() {
+  const el = document.getElementById('artist-list');
+  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无美甲师</td></tr>`; return; }
+  const sm = styleMap();
+  el.innerHTML = DB.artists.map(a => {
+    const recs = DB.records.filter(r => r.artistId === a.id);
+    const totalScore = recs.reduce((s,r) => s+r.score, 0);
+    const totalCount = recs.reduce((s,r) => s+r.count, 0);
+    return `<tr>
+      <td>${a.name}</td>
+      <td>${totalScore.toFixed(2)}</td>
+      <td>${totalCount}</td>
+      <td>
+        <button class="btn btn-sm btn-edit" onclick="editArtist('${a.id}')">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="delArtist('${a.id}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRecordPanel() {
+  // 统计卡片
+  const totalScore = DB.records.reduce((s,r) => s+r.score, 0);
+  const totalCount = DB.records.reduce((s,r) => s+r.count, 0);
+  const todayCount = DB.records.filter(r => r.date === todayStr()).reduce((s,r) => s+r.count, 0);
+  document.getElementById('rec-stats').innerHTML = `
+    <div class="stat-card"><div class="num">${DB.artists.length}</div><div class="label">美甲师数</div></div>
+    <div class="stat-card"><div class="num">${DB.styles.length}</div><div class="label">款式数</div></div>
+    <div class="stat-card"><div class="num">${totalCount}</div><div class="label">累计副数</div></div>
+    <div class="stat-card"><div class="num">${totalScore.toFixed(1)}</div><div class="label">累计积分</div></div>
+    <div class="stat-card"><div class="num">${todayCount}</div><div class="label">今日副数</div></div>
+  `;
+  // 最近记录
+  const el = document.getElementById('rec-recent');
+  const sm = styleMap(), am = artistMap();
+  const recent = [...DB.records].sort((a,b) => b.ts - a.ts).slice(0,10);
+  if (!recent.length) { el.innerHTML = `<tr><td colspan="7" class="empty">暂无记录</td></tr>`; return; }
+  el.innerHTML = recent.map(r => `<tr>
+    <td>${r.date}</td>
+    <td>${am[r.artistId]?.name || '已删除'}</td>
+    <td>${sm[r.styleId]?.name || '已删除'}</td>
+    <td>${r.count}</td>
+    <td>${r.score}</td>
+    <td>${r.note || '-'}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="delRecord('${r.id}')">删除</button></td>
+  </tr>`).join('');
+}
+
+function renderDetail() {
+  const aId = document.getElementById('filter-artist').value;
+  const sId = document.getElementById('filter-style').value;
+  const from = document.getElementById('filter-from').value;
+  const to = document.getElementById('filter-to').value;
+  const sm = styleMap(), am = artistMap();
+  let recs = DB.records.slice().sort((a,b) => b.ts - a.ts);
+  if (aId) recs = recs.filter(r => r.artistId === aId);
+  if (sId) recs = recs.filter(r => r.styleId === sId);
+  if (from) recs = recs.filter(r => r.date >= from);
+  if (to) recs = recs.filter(r => r.date <= to);
+  const el = document.getElementById('detail-list');
+  const totalScore = recs.reduce((s,r) => s+r.score, 0);
+  const totalCount = recs.reduce((s,r) => s+r.count, 0);
+  document.getElementById('detail-summary').textContent = `共 ${recs.length} 条，${totalCount} 副，${totalScore.toFixed(2)} 分`;
+  if (!recs.length) { el.innerHTML = `<tr><td colspan="7" class="empty">无匹配记录</td></tr>`; return; }
+  el.innerHTML = recs.map(r => `<tr>
+    <td>${r.date}</td>
+    <td>${am[r.artistId]?.name || '-'}</td>
+    <td>${sm[r.styleId]?.name || '-'}</td>
+    <td>${r.count}</td>
+    <td>${r.score}</td>
+    <td>${r.note || '-'}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="delRecord('${r.id}')">删除</button></td>
+  </tr>`).join('');
+}
+function clearDetailFilter() {
+  document.getElementById('filter-artist').value = '';
+  document.getElementById('filter-style').value = '';
+  document.getElementById('filter-from').value = '';
+  document.getElementById('filter-to').value = '';
+  renderDetail();
+}
+
+function renderRank() {
+  const el = document.getElementById('rank-list');
+  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无美甲师</td></tr>`; return; }
+  const data = DB.artists.map(a => {
+    const recs = DB.records.filter(r => r.artistId === a.id);
+    return {
+      name: a.name,
+      count: recs.reduce((s,r) => s+r.count, 0),
+      score: recs.reduce((s,r) => s+r.score, 0)
+    };
+  }).sort((a,b) => b.score - a.score);
+  el.innerHTML = data.map((d,i) => {
+    const rank = i+1;
+    const cls = rank <= 3 ? `rank-${rank}` : '';
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+    return `<tr>
+      <td class="${cls}">${medal}</td>
+      <td>${d.name}</td>
+      <td>${d.count}</td>
+      <td><strong>${d.score.toFixed(2)}</strong></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPeriod() {
+  const type = document.getElementById('period-type').value;
+  const from = document.getElementById('period-from').value;
+  const to = document.getElementById('period-to').value;
+  const aId = document.getElementById('period-artist').value;
+  let recs = DB.records.slice();
+  if (aId) recs = recs.filter(r => r.artistId === aId);
+  if (from) recs = recs.filter(r => r.date >= from);
+  if (to) recs = recs.filter(r => r.date <= to);
+  const groups = {};
+  recs.forEach(r => {
+    const key = periodKey(r.date, type);
+    if (!groups[key]) groups[key] = { count: 0, score: 0 };
+    groups[key].count += r.count;
+    groups[key].score += r.score;
+  });
+  const keys = Object.keys(groups).sort();
+  const el = document.getElementById('period-list');
+  if (!keys.length) { el.innerHTML = `<tr><td colspan="3" class="empty">无数据</td></tr>`; return; }
+  let totalC = 0, totalS = 0;
+  el.innerHTML = keys.map(k => {
+    totalC += groups[k].count; totalS += groups[k].score;
+    return `<tr><td>${k}</td><td>${groups[k].count}</td><td>${groups[k].score.toFixed(2)}</td></tr>`;
+  }).join('') + `<tr class="total-row"><td>合计</td><td>${totalC}</td><td>${totalS.toFixed(2)}</td></tr>`;
+}
+function periodKey(date, type) {
+  const [y,m,d] = date.split('-').map(Number);
+  if (type === 'day') return date;
+  if (type === 'month') return `${y}-${String(m).padStart(2,'0')}`;
+  // week: 周一为起点
+  const dt = new Date(y, m-1, d);
+  const day = (dt.getDay()+6)%7;
+  const mon = new Date(dt); mon.setDate(dt.getDate()-day);
+  return `${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')} ~`;
+}
+
+function renderCross() {
+  const mode = document.getElementById('cross-mode').value;
+  const tbl = document.getElementById('cross-table');
+  if (!DB.styles.length || !DB.artists.length) {
+    tbl.innerHTML = `<tr><td class="empty">款式或美甲师为空</td></tr>`; return;
+  }
+  // 表头
+  let html = '<thead><tr><th>款式 ╲ 美甲师</th>';
+  DB.artists.forEach(a => html += `<th>${a.name}</th>`);
+  html += '<th>合计</th></tr></thead><tbody>';
+  let colTotals = DB.artists.map(()=>0);
+  DB.styles.forEach(s => {
+    let rowTotal = 0;
+    html += `<tr><td>${s.name}</td>`;
+    DB.artists.forEach((a,i) => {
+      const recs = DB.records.filter(r => r.styleId === s.id && r.artistId === a.id);
+      const count = recs.reduce((sum,r)=>sum+r.count,0);
+      const score = recs.reduce((sum,r)=>sum+r.score,0);
+      const val = mode === 'count' ? count : +score.toFixed(2);
+      rowTotal += val;
+      colTotals[i] += val;
+      html += `<td>${val || '-'}</td>`;
+    });
+    html += `<td><strong>${+rowTotal.toFixed(2)}</strong></td></tr>`;
+  });
+  // 合计行
+  html += `<tr class="total-row"><td>合计</td>`;
+  colTotals.forEach(c => html += `<td>${+c.toFixed(2)}</td>`);
+  const grand = colTotals.reduce((s,c)=>s+c,0);
+  html += `<td>${+grand.toFixed(2)}</td></tr></tbody>`;
+  tbl.innerHTML = html;
+}
+
+// ===== 月度统计 =====
+function monthlyKey(date) { return date.substring(0, 7); } // YYYY-MM
+function currentMonthStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function prevMonth() {
+  const inp = document.getElementById('monthly-month');
+  const [y,m] = inp.value.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  inp.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  renderMonthly();
+}
+function nextMonth() {
+  const inp = document.getElementById('monthly-month');
+  const [y,m] = inp.value.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  inp.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  renderMonthly();
+}
+function renderMonthly() {
+  const month = document.getElementById('monthly-month').value || currentMonthStr();
+  document.getElementById('monthly-month').value = month;
+  const sm = styleMap(), am = artistMap();
+  const monthRecs = DB.records.filter(r => monthlyKey(r.date) === month);
+
+  // 按美甲师汇总
+  const artistData = {};
+  DB.artists.forEach(a => {
+    artistData[a.id] = { name: a.name, totalCount: 0, totalScore: 0, styles: {} };
+  });
+  monthRecs.forEach(r => {
+    if (!artistData[r.artistId]) return;
+    const ad = artistData[r.artistId];
+    ad.totalCount += r.count;
+    ad.totalScore += r.score;
+    const sName = sm[r.styleId] ? sm[r.styleId].name : '已删除款式';
+    const sScore = sm[r.styleId] ? sm[r.styleId].score : 0;
+    if (!ad.styles[r.styleId]) ad.styles[r.styleId] = { name: sName, score: sScore, count: 0, subScore: 0 };
+    ad.styles[r.styleId].count += r.count;
+    ad.styles[r.styleId].subScore += r.score;
+  });
+
+  // 按积分从高到低排序
+  const ranked = Object.values(artistData)
+    .filter(a => a.totalScore > 0 || a.totalCount > 0)
+    .sort((a,b) => b.totalScore - a.totalScore);
+
+  const [y,m] = month.split('-');
+  const monthName = `${y}年${parseInt(m)}月`;
+
+  // 汇总
+  const grandCount = ranked.reduce((s,a) => s+a.totalCount, 0);
+  const grandScore = ranked.reduce((s,a) => s+a.totalScore, 0);
+  document.getElementById('monthly-summary').textContent =
+    `${monthName} · 共 ${ranked.length} 人 · ${grandCount} 副 · ${grandScore.toFixed(2)} 分`;
+
+  const container = document.getElementById('monthly-content');
+  if (!ranked.length) {
+    container.innerHTML = `<div class="empty">${monthName} 暂无记录</div>`;
+    return;
+  }
+
+  // 顶部排行概览卡片
+  let cardsHtml = '<div class="stat-grid" style="margin-bottom:16px;">';
+  ranked.slice(0,3).forEach((a,i) => {
+    const medal = i===0 ? '🥇' : i===1 ? '🥈' : '🥉';
+    cardsHtml += `<div class="stat-card"><div class="num" style="font-size:22px;">${medal}</div><div style="font-weight:600;margin:4px 0;">${a.name}</div><div class="num" style="font-size:22px;color:var(--primary);">${a.totalScore.toFixed(1)}</div><div class="label">积分 · ${a.totalCount}副</div></div>`;
+  });
+  cardsHtml += '</div>';
+
+  // 详细排行表
+  let html = cardsHtml;
+  html += `<div class="table-wrap"><table>
+    <thead><tr><th>排名</th><th>美甲师</th><th>总副数</th><th>总积分</th><th>款式明细</th></tr></thead><tbody>`;
+  ranked.forEach((a, i) => {
+    const rank = i + 1;
+    const cls = rank <= 3 ? `rank-${rank}` : '';
+    const styleDetail = Object.values(a.styles).map(s =>
+      `<span class="badge" style="margin:2px;">${s.name} ×${s.count}（${s.subScore.toFixed(2)}分）</span>`
+    ).join('');
+    html += `<tr>
+      <td class="${cls}">${rank<=3?['🥇','🥈','🥉'][rank-1]:rank}</td>
+      <td style="font-weight:600;">${a.name}</td>
+      <td>${a.totalCount}</td>
+      <td><strong style="color:var(--primary);">${a.totalScore.toFixed(2)}</strong></td>
+      <td style="line-height:2.2;">${styleDetail || '-'}</td>
+    </tr>`;
+  });
+  // 合计行
+  html += `<tr class="total-row"><td colspan="2">合计</td><td>${grandCount}</td><td>${grandScore.toFixed(2)}</td><td>-</td></tr>`;
+  html += '</tbody></table></div>';
+
+  container.innerHTML = html;
+}
+
+// ===== 通用 =====
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function renderAll() {
+  fillSelects();
+  renderStyles(); renderArtists(); renderRecordPanel();
+  renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderCross();
+}
+
+// Tab 切换
+document.querySelectorAll('.tab').forEach((t, idx) => {
+  t.setAttribute('data-idx', idx);
+  t.addEventListener('click', function(e) {
+    e.preventDefault();
+    const key = this.dataset.tab;
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+    const panel = document.getElementById('panel-' + key);
+    if (panel) panel.classList.add('active');
+    if (key === 'detail') renderDetail();
+    if (key === 'rank') renderRank();
+    if (key === 'period') renderPeriod();
+    if (key === 'monthly') renderMonthly();
+    if (key === 'cross') renderCross();
+  });
+});
+
+// 预置示例数据（首次使用，仅写本地，由启动逻辑决定是否推云端）
+function seedIfEmpty() {
+  if (DB.styles.length || DB.artists.length || DB.records.length) return;
+  const s1 = { id: uid(), name: '款式A（纯色）', score: 1 };
+  const s2 = { id: uid(), name: '款式B（渐变）', score: 1.2 };
+  const s3 = { id: uid(), name: '款式C（手绘）', score: 2 };
+  DB.styles = [s1, s2, s3];
+  const a1 = { id: uid(), name: '美甲师A' };
+  const a2 = { id: uid(), name: '美甲师B' };
+  DB.artists = [a1, a2];
+  const today = todayStr();
+  DB.records = [
+    { id: uid(), artistId: a1.id, styleId: s1.id, count: 1, score: 1, date: today, note: '', ts: Date.now()-3000 },
+    { id: uid(), artistId: a1.id, styleId: s2.id, count: 2, score: 2.4, date: today, note: '', ts: Date.now()-2000 },
+    { id: uid(), artistId: a2.id, styleId: s3.id, count: 1, score: 2, date: today, note: '', ts: Date.now()-1000 },
+  ];
+  saveLocal();
+}
+
+// 启动：先本地渲染，再云端同步
+loadLocal();
+seedIfEmpty(); // 本地为空且云端也为空时预置示例
+document.getElementById('rec-date').value = todayStr();
+document.getElementById('monthly-month').value = currentMonthStr();
+renderAll();
+// 异步从云端拉取最新数据（覆盖本地）
+pullCloud().then(ok => {
+  if (ok) {
+    // 云端有数据则用云端的；若云端为空且本地有示例数据，推送到云端
+    if ((!DB.styles.length && !DB.artists.length && !DB.records.length)) {
+      seedIfEmpty();
+      saveLocal();
+      pushCloud();
+      renderAll();
+    }
+  }
+});
+// 每60秒自动同步一次
+setInterval(pullCloud, 60000);
+</script>
+</body>
+</html>
