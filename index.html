@@ -1788,7 +1788,7 @@ document.querySelectorAll('.tab').forEach((t, idx) => {
     e.preventDefault();
     const key = this.dataset.tab;
     // 受保护页面：需登录才能访问
-    const protectedTabs = ['record', 'styles', 'artists'];
+    const protectedTabs = ['record', 'styles', 'artists', 'period', 'monthly', 'cross'];
     // 管理员设置页：仅主管理员
     if (key === 'admin' && !isMaster()) {
       toast('仅主管理员可访问');
