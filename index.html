@@ -53,25 +53,53 @@
     border-bottom: 1px solid var(--border);
     margin-bottom: 8px;
   }
-  .nav-group { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
+  .nav-group { margin-bottom: 6px; }
   .nav-group-title {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--primary-dark);
-    text-transform: uppercase;
     letter-spacing: 1px;
-    padding: 6px 14px 6px;
+    padding: 10px 14px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 8px;
+    background: var(--primary-light);
+    transition: background 0.2s;
   }
+  .nav-group-title:hover { background: #e6c8cd; }
   .nav-group-title::before {
     content: '';
     display: inline-block;
     width: 3px;
-    height: 12px;
+    height: 14px;
     background: var(--primary);
     border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .nav-group-title .arrow {
+    margin-left: auto;
+    font-size: 10px;
+    transition: transform 0.25s;
+    color: var(--primary);
+  }
+  .nav-group.collapsed .arrow { transform: rotate(-90deg); }
+  .nav-group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+    max-height: 500px;
+    transition: max-height 0.3s ease, opacity 0.2s ease;
+    opacity: 1;
+    padding-top: 4px;
+  }
+  .nav-group.collapsed .nav-group-items {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
   }
   .tabs { display: flex; flex-direction: column; gap: 4px; }
   .tab {
@@ -282,17 +310,23 @@
       padding: 6px;
     }
     .sidebar-title { display: none; }
-    .nav-group { margin-bottom: 0; display: contents; }
+    .nav-group { margin-bottom: 4px; }
     .nav-group-title {
       white-space: nowrap;
-      padding: 4px 8px;
-      font-size: 10px;
+      padding: 8px 12px;
+      font-size: 12px;
     }
-    .nav-group-title::before { display: none; }
-    .tabs {
+    .nav-group-items {
       flex-direction: row;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 4px 0;
+    }
+    .nav-group.collapsed .nav-group-items {
+      max-height: 0;
+    }
+    .tabs {
+      flex-direction: column;
     }
     .tab {
       white-space: nowrap;
@@ -314,23 +348,29 @@
     <aside class="sidebar">
       <div class="sidebar-title">功能菜单</div>
       <div class="tabs">
-        <div class="nav-group">
-          <div class="nav-group-title">查询系统</div>
-          <button class="tab active" data-tab="daily">📊 每日统计</button>
-          <button class="tab" data-tab="detail">📋 明细记录</button>
+        <div class="nav-group" data-group="query">
+          <div class="nav-group-title" onclick="toggleGroup(this)">查询系统 <span class="arrow">▼</span></div>
+          <div class="nav-group-items">
+            <button class="tab active" data-tab="daily">📊 每日统计</button>
+            <button class="tab" data-tab="detail">📋 明细记录</button>
+          </div>
         </div>
-        <div class="nav-group">
-          <div class="nav-group-title">录入系统</div>
-          <button class="tab" data-tab="record">📝 计分录入</button>
-          <button class="tab" data-tab="styles">🎨 款式管理</button>
-          <button class="tab" data-tab="artists">👤 美甲师管理</button>
+        <div class="nav-group collapsed" data-group="input">
+          <div class="nav-group-title" onclick="toggleGroup(this)">录入系统 <span class="arrow">▼</span></div>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="record">📝 计分录入</button>
+            <button class="tab" data-tab="styles">🎨 款式管理</button>
+            <button class="tab" data-tab="artists">👤 美甲师管理</button>
+          </div>
         </div>
-        <div class="nav-group">
-          <div class="nav-group-title">数据统计</div>
-          <button class="tab" data-tab="rank">🏆 排行榜</button>
-          <button class="tab" data-tab="period">📅 时段统计</button>
-          <button class="tab" data-tab="monthly">📆 月度统计</button>
-          <button class="tab" data-tab="cross">🔀 交叉统计</button>
+        <div class="nav-group collapsed" data-group="stats">
+          <div class="nav-group-title" onclick="toggleGroup(this)">数据统计 <span class="arrow">▼</span></div>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="rank">🏆 排行榜</button>
+            <button class="tab" data-tab="period">📅 时段统计</button>
+            <button class="tab" data-tab="monthly">📆 月度统计</button>
+            <button class="tab" data-tab="cross">🔀 交叉统计</button>
+          </div>
         </div>
       </div>
     </aside>
@@ -1358,12 +1398,26 @@ function renderAll() {
   renderDetail(); renderRank(); renderPeriod(); renderMonthly(); renderDaily(); renderCross();
 }
 
+// 分组折叠
+function toggleGroup(titleEl) {
+  const group = titleEl.parentElement;
+  group.classList.toggle('collapsed');
+}
+// 展开指定 tab 所在的分组
+function expandGroupOf(tab) {
+  const group = tab.closest('.nav-group');
+  if (group && group.classList.contains('collapsed')) {
+    group.classList.remove('collapsed');
+  }
+}
+
 // Tab 切换
 document.querySelectorAll('.tab').forEach((t, idx) => {
   t.setAttribute('data-idx', idx);
   t.addEventListener('click', function(e) {
     e.preventDefault();
     const key = this.dataset.tab;
+    expandGroupOf(this); // 展开当前 tab 所在分组
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
     this.classList.add('active');
