@@ -158,6 +158,36 @@
   }
   .stat-card .num { font-size: 28px; font-weight: 700; color: var(--primary); }
   .stat-card .label { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+  .avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary-light);
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  .avatar-sm { width: 32px; height: 32px; border-width: 1.5px; }
+  .avatar-lg { width: 64px; height: 64px; border-width: 3px; }
+  .avatar-placeholder {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    font-weight: 600;
+    font-size: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+  }
+  .avatar-placeholder.sm { width: 32px; height: 32px; font-size: 13px; border-width: 1.5px; }
+  .avatar-placeholder.lg { width: 64px; height: 64px; font-size: 24px; border-width: 3px; }
+  .avatar-cell { display: flex; align-items: center; gap: 10px; }
+  .avatar-upload {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px; padding: 12px;
+    background: var(--primary-light); border-radius: 8px;
+  }
+  .avatar-upload img, .avatar-upload .avatar-placeholder { width: 56px; height: 56px; font-size: 22px; border-width: 2.5px; }
+  .avatar-upload label { font-size: 13px; color: var(--primary-dark); cursor: pointer; text-decoration: underline; }
   .badge {
     display: inline-block;
     padding: 2px 10px;
@@ -347,6 +377,12 @@
   <div class="panel" id="panel-artists">
     <div class="card">
       <h2>添加美甲师</h2>
+      <div class="avatar-upload">
+        <div id="add-avatar-preview"><span class="avatar-placeholder">头</span></div>
+        <label for="add-avatar-input">📷 选择头像（可选）</label>
+        <input type="file" id="add-avatar-input" accept="image/*" style="display:none;" onchange="previewAddAvatar(this)">
+        <button type="button" class="btn btn-sm" id="add-avatar-clear" style="background:#eee;display:none;" onclick="clearAddAvatar()">移除</button>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>美甲师姓名</label>
@@ -359,7 +395,7 @@
       <h2>美甲师列表</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>姓名</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
+          <thead><tr><th>头像</th><th>姓名</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
           <tbody id="artist-list"></tbody>
         </table>
       </div>
@@ -489,6 +525,11 @@
 <div class="modal-mask" id="modal-artist">
   <div class="modal">
     <h3>编辑美甲师</h3>
+    <div class="avatar-upload">
+      <div id="edit-avatar-preview"><span class="avatar-placeholder">头</span></div>
+      <label for="edit-avatar-input">📷 更换头像</label>
+      <input type="file" id="edit-avatar-input" accept="image/*" style="display:none;" onchange="previewEditAvatar(this)">
+    </div>
     <div class="form-group">
       <label>姓名</label>
       <input type="text" id="edit-artist-name">
@@ -622,19 +663,76 @@ function delStyle(id) {
 }
 
 // ===== 美甲师 =====
+// 头像辅助：渲染头像HTML（有图显示图，无图显示首字）
+function avatarHTML(artist, sizeClass = '') {
+  if (artist.avatar) {
+    return `<img src="${artist.avatar}" class="avatar ${sizeClass}" alt="${artist.name}">`;
+  }
+  const ch = artist.name ? artist.name[0] : '?';
+  return `<span class="avatar-placeholder ${sizeClass}">${ch}</span>`;
+}
+// 头像辅助：文件转压缩base64（控制大小便于云端存储）
+let pendingAddAvatar = '';
+let pendingEditAvatar = '';
+function fileToAvatar(file, cb) {
+  if (!file) { cb(''); return; }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const maxSize = 160;
+      let { width, height } = img;
+      if (width > height) { if (width > maxSize) { height = height * maxSize / width; width = maxSize; } }
+      else { if (height > maxSize) { width = width * maxSize / height; height = maxSize; } }
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      cb(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function previewAddAvatar(input) {
+  fileToAvatar(input.files[0], function(data) {
+    pendingAddAvatar = data;
+    const el = document.getElementById('add-avatar-preview');
+    el.innerHTML = data ? `<img src="${data}" class="avatar">` : '<span class="avatar-placeholder">头</span>';
+    document.getElementById('add-avatar-clear').style.display = data ? '' : 'none';
+  });
+}
+function clearAddAvatar() {
+  pendingAddAvatar = '';
+  document.getElementById('add-avatar-input').value = '';
+  document.getElementById('add-avatar-preview').innerHTML = '<span class="avatar-placeholder">头</span>';
+  document.getElementById('add-avatar-clear').style.display = 'none';
+}
+function previewEditAvatar(input) {
+  fileToAvatar(input.files[0], function(data) {
+    if (data) pendingEditAvatar = data;
+    const el = document.getElementById('edit-avatar-preview');
+    el.innerHTML = data ? `<img src="${data}" class="avatar">` : el.innerHTML;
+  });
+}
+
 function addArtist() {
   const name = document.getElementById('artist-name').value.trim();
   if (!name) return toast('请输入姓名');
   if (DB.artists.some(a => a.name === name)) return toast('美甲师已存在');
-  DB.artists.push({ id: uid(), name });
+  DB.artists.push({ id: uid(), name, avatar: pendingAddAvatar || '' });
   save();
   document.getElementById('artist-name').value = '';
+  clearAddAvatar();
   toast('美甲师已添加'); renderAll();
 }
 function editArtist(id) {
   const a = DB.artists.find(x => x.id === id);
   if (!a) return;
   document.getElementById('edit-artist-name').value = a.name;
+  pendingEditAvatar = '';
+  const el = document.getElementById('edit-avatar-preview');
+  el.innerHTML = a.avatar ? `<img src="${a.avatar}" class="avatar">` : `<span class="avatar-placeholder">${a.name[0]}</span>`;
   document.getElementById('modal-artist').dataset.id = id;
   document.getElementById('modal-artist').classList.add('show');
 }
@@ -645,7 +743,9 @@ function saveArtistEdit() {
   const name = document.getElementById('edit-artist-name').value.trim();
   if (!name) return toast('请输入姓名');
   a.name = name;
+  if (pendingEditAvatar) a.avatar = pendingEditAvatar;
   save(); closeModal('modal-artist');
+  pendingEditAvatar = '';
   toast('已保存'); renderAll();
 }
 function delArtist(id) {
@@ -793,13 +893,13 @@ function renderStyles() {
 
 function renderArtists() {
   const el = document.getElementById('artist-list');
-  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无美甲师</td></tr>`; return; }
-  const sm = styleMap();
+  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无美甲师</td></tr>`; return; }
   el.innerHTML = DB.artists.map(a => {
     const recs = DB.records.filter(r => r.artistId === a.id);
     const totalScore = recs.reduce((s,r) => s+r.score, 0);
     const totalCount = recs.reduce((s,r) => s+r.count, 0);
     return `<tr>
+      <td>${avatarHTML(a, 'avatar-sm')}</td>
       <td>${a.name}</td>
       <td>${totalScore.toFixed(2)}</td>
       <td>${totalCount}</td>
@@ -879,6 +979,7 @@ function renderRank() {
   const data = DB.artists.map(a => {
     const recs = DB.records.filter(r => r.artistId === a.id);
     return {
+      artist: a,
       name: a.name,
       count: recs.reduce((s,r) => s+r.count, 0),
       score: recs.reduce((s,r) => s+r.score, 0)
@@ -890,7 +991,7 @@ function renderRank() {
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
     return `<tr>
       <td class="${cls}">${medal}</td>
-      <td>${d.name}</td>
+      <td><div class="avatar-cell">${avatarHTML(d.artist, 'avatar-sm')} ${d.name}</div></td>
       <td>${d.count}</td>
       <td><strong>${d.score.toFixed(2)}</strong></td>
     </tr>`;
@@ -995,7 +1096,7 @@ function renderMonthly() {
   // 按美甲师汇总
   const artistData = {};
   DB.artists.forEach(a => {
-    artistData[a.id] = { name: a.name, totalCount: 0, totalScore: 0, styles: {} };
+    artistData[a.id] = { name: a.name, artist: a, totalCount: 0, totalScore: 0, styles: {} };
   });
   monthRecs.forEach(r => {
     if (!artistData[r.artistId]) return;
@@ -1033,7 +1134,7 @@ function renderMonthly() {
   let cardsHtml = '<div class="stat-grid" style="margin-bottom:16px;">';
   ranked.slice(0,3).forEach((a,i) => {
     const medal = i===0 ? '🥇' : i===1 ? '🥈' : '🥉';
-    cardsHtml += `<div class="stat-card"><div class="num" style="font-size:22px;">${medal}</div><div style="font-weight:600;margin:4px 0;">${a.name}</div><div class="num" style="font-size:22px;color:var(--primary);">${a.totalScore.toFixed(1)}</div><div class="label">积分 · ${a.totalCount}副</div></div>`;
+    cardsHtml += `<div class="stat-card"><div class="num" style="font-size:22px;">${medal}</div><div style="margin:6px 0;">${avatarHTML(a.artist, 'avatar-lg')}</div><div style="font-weight:600;margin:4px 0;">${a.name}</div><div class="num" style="font-size:22px;color:var(--primary);">${a.totalScore.toFixed(1)}</div><div class="label">积分 · ${a.totalCount}副</div></div>`;
   });
   cardsHtml += '</div>';
 
@@ -1049,7 +1150,7 @@ function renderMonthly() {
     ).join('');
     html += `<tr>
       <td class="${cls}">${rank<=3?['🥇','🥈','🥉'][rank-1]:rank}</td>
-      <td style="font-weight:600;">${a.name}</td>
+      <td><div class="avatar-cell">${avatarHTML(a.artist, 'avatar-sm')} <span style="font-weight:600;">${a.name}</span></div></td>
       <td>${a.totalCount}</td>
       <td><strong style="color:var(--primary);">${a.totalScore.toFixed(2)}</strong></td>
       <td style="line-height:2.2;">${styleDetail || '-'}</td>
