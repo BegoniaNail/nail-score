@@ -565,9 +565,17 @@
   <div class="panel" id="panel-rank">
     <div class="card">
       <h2>积分排行榜</h2>
+      <div class="filter-bar">
+        <label style="font-size:13px">选择月份：</label>
+        <input type="month" id="rank-month">
+        <button class="btn btn-primary btn-sm" onclick="renderRank()">查看</button>
+        <button class="btn btn-sm" style="background:#eee" onclick="rankPrevMonth()">◀ 上月</button>
+        <button class="btn btn-sm" style="background:#eee" onclick="rankNextMonth()">下月 ▶</button>
+        <span id="rank-summary" style="margin-left:auto;font-size:13px;color:var(--text-light)"></span>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>排名</th><th>美甲师</th><th>总副数</th><th>总积分</th></tr></thead>
+          <thead><tr><th>排名</th><th>美甲师</th><th>本月副数</th><th>本月积分</th></tr></thead>
           <tbody id="rank-list"></tbody>
         </table>
       </div>
@@ -1395,18 +1403,44 @@ function clearDetailFilter() {
   renderDetail();
 }
 
+function rankPrevMonth() {
+  const inp = document.getElementById('rank-month');
+  const [y,m] = inp.value.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  inp.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  renderRank();
+}
+function rankNextMonth() {
+  const inp = document.getElementById('rank-month');
+  const [y,m] = inp.value.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  inp.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  renderRank();
+}
 function renderRank() {
   const el = document.getElementById('rank-list');
+  const month = document.getElementById('rank-month').value || currentMonthStr();
+  document.getElementById('rank-month').value = month;
   if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无美甲师</td></tr>`; return; }
+  // 只统计该月的数据
   const data = DB.artists.map(a => {
-    const recs = DB.records.filter(r => r.artistId === a.id);
+    const recs = DB.records.filter(r => r.artistId === a.id && r.date.substring(0,7) === month);
     return {
       artist: a,
       name: a.name,
       count: recs.reduce((s,r) => s+r.count, 0),
       score: recs.reduce((s,r) => s+r.score, 0)
     };
-  }).sort((a,b) => b.score - a.score);
+  }).filter(d => d.score > 0 || d.count > 0).sort((a,b) => b.score - a.score);
+
+  const [y,m] = month.split('-');
+  const monthName = `${y}年${parseInt(m)}月`;
+  const grandCount = data.reduce((s,d) => s+d.count, 0);
+  const grandScore = data.reduce((s,d) => s+d.score, 0);
+  document.getElementById('rank-summary').textContent =
+    data.length ? `${monthName} · 共 ${data.length} 人 · ${grandCount} 副 · ${grandScore.toFixed(2)} 分` : `${monthName} · 暂无数据`;
+
+  if (!data.length) { el.innerHTML = `<tr><td colspan="4" class="empty">${monthName} 暂无记录</td></tr>`; return; }
   el.innerHTML = data.map((d,i) => {
     const rank = i+1;
     const cls = rank <= 3 ? `rank-${rank}` : '';
@@ -1845,6 +1879,7 @@ loadLocal();
 seedIfEmpty(); // 本地为空且云端也为空时预置示例
 document.getElementById('rec-date').value = todayStr();
 document.getElementById('monthly-month').value = currentMonthStr();
+document.getElementById('rank-month').value = currentMonthStr();
 document.getElementById('daily-date').value = todayStr();
 renderAll();
 // 默认选中第一位美甲师并渲染每日统计
