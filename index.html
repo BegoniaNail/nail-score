@@ -1036,9 +1036,16 @@ function savePushTime() {
   localStorage.setItem(PUSH_TIME_KEY, String(lastPushTime));
 }
 
-// base64 编码/解码（支持中文）
-function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
-function b64decode(b64) { return decodeURIComponent(escape(atob(b64))); }
+// base64 编码/解码（支持中文，兼容 iOS）
+function b64encode(str) {
+  return btoa(String.fromCharCode.apply(null, new TextEncoder().encode(str)));
+}
+function b64decode(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
 
 // ===== GitHub 仓库存储（主）=====
 // 合并云端数据到本地：以本地为主，补充本地缺失的记录
@@ -3123,6 +3130,28 @@ function seedIfEmpty() {
 }
 
 // 启动：先本地渲染，再云端同步
+// 版本检测：iOS PWA 模式会缓存 HTML，需要强制刷新到最新版
+(async function checkVersion() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/BegoniaNail/nail-score/commits/main?per_page=1`, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const remoteSha = data.sha.substring(0, 7);
+      const localSha = localStorage.getItem('appVersionSha');
+      if (localSha && localSha !== remoteSha) {
+        // 版本不同，清除缓存并刷新
+        console.log('检测到新版本，正在刷新...', localSha, '→', remoteSha);
+        localStorage.setItem('appVersionSha', remoteSha);
+        window.location.reload(true);
+        return;
+      }
+      localStorage.setItem('appVersionSha', remoteSha);
+    }
+  } catch(e) { console.log('版本检测失败，继续启动'); }
+})();
+
 loadLocal();
 // 仅确保有管理员（不预置示例数据，等云端拉取后再决定）
 if (!DB.admins.length) {
