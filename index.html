@@ -1547,11 +1547,15 @@ function fillSelects() {
   dA.innerHTML = DB.artists.length ? DB.artists.map(a => `<option value="${a.id}">${a.name}</option>`).join('') : '<option value="">请先添加美甲师</option>';
   if (curDA) dA.value = curDA;
 
-  // 打版统计打版师下拉
+  // 打版统计下拉（打版师 + 美甲师）
   const dsD = document.getElementById('designerstat-designer');
   if (dsD) {
     const curDsD = dsD.value;
-    dsD.innerHTML = '<option value="">请选择打版师</option>' + DB.designers.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    const peopleOpts = [
+      ...DB.designers.map(d => `<option value="designer:${d.id}">${d.name}（打版师）</option>`),
+      ...DB.artists.map(a => `<option value="artist:${a.id}">${a.name}（美甲师）</option>`)
+    ].join('');
+    dsD.innerHTML = '<option value="">请选择打版师或美甲师</option>' + peopleOpts;
     if (curDsD) dsD.value = curDsD;
   }
   const fS = document.getElementById('filter-style');
@@ -1942,16 +1946,32 @@ function nextDesignerMonth() {
   inp.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
   renderDesignerStat();
 }
-function buildDesignerStatHTML(designerId, month) {
-  const designer = DB.designers.find(d => d.id === designerId);
-  if (!designer) return '';
+// 根据选项值（如 "designer:abc" / "artist:xyz"）解析人物信息
+function resolveDesignerStatPerson(value) {
+  if (!value) return null;
+  const [type, id] = value.split(':');
+  if (type === 'designer') {
+    const d = DB.designers.find(x => x.id === id);
+    return d ? { name: d.name, person: d, type: '打版师' } : null;
+  }
+  if (type === 'artist') {
+    const a = DB.artists.find(x => x.id === id);
+    return a ? { name: a.name, person: a, type: '美甲师' } : null;
+  }
+  return null;
+}
+
+function buildDesignerStatHTML(value, month) {
+  const info = resolveDesignerStatPerson(value);
+  if (!info) return '';
+  const { name, person, type } = info;
   const [y,m] = month.split('-');
   const monthName = `${y}年${parseInt(m)}月`;
 
-  // 筛选该打版师当月的款式（按 id 去重）
+  // 筛选该人员当月的款式（按 id 去重，按 name 匹配打版师字段）
   const seenIds = new Set();
   const monthStyles = DB.styles.filter(s => {
-    if (s.designer !== designer.name) return false;
+    if (s.designer !== name) return false;
     if ((s.createDate || '').substring(0, 7) !== month) return false;
     if (seenIds.has(s.id)) return false;
     seenIds.add(s.id);
@@ -1961,14 +1981,14 @@ function buildDesignerStatHTML(designerId, month) {
   const totalCount = monthStyles.length;
   const totalScore = monthStyles.reduce((s, st) => s + (st.score || 0), 0);
 
-  // 打版师信息卡片
+  // 信息卡片
   let html = `
     <div style="background:linear-gradient(135deg, var(--primary), var(--primary-dark));border-radius:var(--radius);padding:24px;color:white;margin-bottom:16px;">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
-        ${avatarHTML(designer, 'avatar-lg')}
+        ${avatarHTML(person, 'avatar-lg')}
         <div>
-          <div style="font-size:24px;font-weight:700;">${designer.name}</div>
-          <div style="font-size:16px;opacity:0.95;font-weight:600;">时间：${monthName}</div>
+          <div style="font-size:24px;font-weight:700;">${name}</div>
+          <div style="font-size:16px;opacity:0.95;font-weight:600;">${type} · 时间：${monthName}</div>
         </div>
       </div>
       <div style="display:flex;gap:24px;flex-wrap:wrap;">
@@ -2010,31 +2030,31 @@ function buildDesignerStatHTML(designerId, month) {
 function renderDesignerStat() {
   const month = document.getElementById('designerstat-month').value || currentMonthStr();
   document.getElementById('designerstat-month').value = month;
-  const designerId = document.getElementById('designerstat-designer').value;
+  const value = document.getElementById('designerstat-designer').value;
   const container = document.getElementById('designerstat-content');
   const [y,m] = month.split('-');
   const monthName = `${y}年${parseInt(m)}月`;
 
-  if (!designerId) {
-    container.innerHTML = `<div class="empty">请选择打版师</div>`;
+  if (!value) {
+    container.innerHTML = `<div class="empty">请选择打版师或美甲师</div>`;
     document.getElementById('designerstat-summary').textContent = '';
     document.getElementById('designerstat-download-bar').style.display = 'none';
     return;
   }
 
-  const designer = DB.designers.find(d => d.id === designerId);
-  if (!designer) {
-    container.innerHTML = `<div class="empty">打版师不存在</div>`;
+  const info = resolveDesignerStatPerson(value);
+  if (!info) {
+    container.innerHTML = `<div class="empty">人员不存在</div>`;
     document.getElementById('designerstat-download-bar').style.display = 'none';
     return;
   }
 
-  container.innerHTML = buildDesignerStatHTML(designerId, month);
+  container.innerHTML = buildDesignerStatHTML(value, month);
 
   // 汇总信息
   const seenIds = new Set();
   const monthStyles = DB.styles.filter(s => {
-    if (s.designer !== designer.name) return false;
+    if (s.designer !== info.name) return false;
     if ((s.createDate || '').substring(0, 7) !== month) return false;
     if (seenIds.has(s.id)) return false;
     seenIds.add(s.id);
@@ -2043,27 +2063,27 @@ function renderDesignerStat() {
   const totalCount = monthStyles.length;
   const totalScore = monthStyles.reduce((s, st) => s + (st.score || 0), 0);
   document.getElementById('designerstat-summary').textContent =
-    `${monthName} · ${designer.name} · ${totalCount} 款 · ${totalScore.toFixed(2)} 分`;
+    `${monthName} · ${info.name}（${info.type}） · ${totalCount} 款 · ${totalScore.toFixed(2)} 分`;
 
   document.getElementById('designerstat-download-bar').style.display = 'block';
 }
 
-// 下载当前打版师统计图片
+// 下载当前人员统计图片
 function downloadDesignerStatImage() {
   const target = document.getElementById('designerstat-content');
   if (!target) return;
-  const designerId = document.getElementById('designerstat-designer').value;
-  if (!designerId) return toast('请先选择打版师');
+  const value = document.getElementById('designerstat-designer').value;
+  if (!value) return toast('请先选择打版师或美甲师');
+  const info = resolveDesignerStatPerson(value);
+  if (!info) return toast('人员不存在');
   toast('正在生成图片…');
   html2canvas(target, {
     scale: 2,
     backgroundColor: '#f8f3f3',
     useCORS: true
   }).then(function(canvas) {
-    const designer = DB.designers.find(d => d.id === designerId);
-    const designerName = designer ? designer.name : '打版师';
     const month = document.getElementById('designerstat-month').value || currentMonthStr();
-    const filename = `打版统计_${designerName}_${month}.png`;
+    const filename = `打版统计_${info.name}_${month}.png`;
     canvas.toBlob(function(blob) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -2081,27 +2101,31 @@ function downloadDesignerStatImage() {
   });
 }
 
-// 下载所有打版师的统计图片
+// 下载所有打版师和美甲师的统计图片（合并去重）
 function downloadAllDesignerStatImages() {
-  if (!DB.designers.length) return toast('暂无打版师');
+  const allValues = [
+    ...DB.designers.map(d => ({ value: 'designer:' + d.id, name: d.name })),
+    ...DB.artists.map(a => ({ value: 'artist:' + a.id, name: a.name }))
+  ];
+  if (!allValues.length) return toast('暂无人员');
   const month = document.getElementById('designerstat-month').value || currentMonthStr();
   const container = document.getElementById('designerstat-content');
-  const designers = DB.designers;
+  const list = allValues;
   let idx = 0;
 
-  toast(`正在生成 1/${designers.length}…`);
+  toast(`正在生成 1/${list.length}…`);
 
   function next() {
-    if (idx >= designers.length) {
-      // 恢复原来选中的打版师显示
-      const curId = document.getElementById('designerstat-designer').value;
-      container.innerHTML = buildDesignerStatHTML(curId, month);
+    if (idx >= list.length) {
+      // 恢复原来选中的人员显示
+      const curValue = document.getElementById('designerstat-designer').value;
+      container.innerHTML = buildDesignerStatHTML(curValue, month);
       toast('全部下载完成');
       return;
     }
-    const designer = designers[idx];
-    container.innerHTML = buildDesignerStatHTML(designer.id, month);
-    toast(`正在生成 ${idx + 1}/${designers.length}：${designer.name}…`);
+    const item = list[idx];
+    container.innerHTML = buildDesignerStatHTML(item.value, month);
+    toast(`正在生成 ${idx + 1}/${list.length}：${item.name}…`);
 
     setTimeout(function() {
       html2canvas(container, {
@@ -2109,7 +2133,7 @@ function downloadAllDesignerStatImages() {
         backgroundColor: '#f8f3f3',
         useCORS: true
       }).then(function(canvas) {
-        const filename = `打版统计_${designer.name}_${month}.png`;
+        const filename = `打版统计_${item.name}_${month}.png`;
         canvas.toBlob(function(blob) {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -2124,7 +2148,7 @@ function downloadAllDesignerStatImages() {
         }, 'image/png');
       }).catch(function(err) {
         console.error(err);
-        toast(`生成 ${designer.name} 图片失败，跳过`);
+        toast(`生成 ${item.name} 图片失败，跳过`);
         idx++;
         setTimeout(next, 600);
       });
