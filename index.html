@@ -1728,7 +1728,8 @@ function renderStyleRows() {
   }
   tbody.innerHTML = styleRows.map((r, i) => {
     const s = DB.styles.find(x => x.id === r.styleId);
-    const sub = s ? (s.score * (r.count || 0)).toFixed(2) : '0';
+    const sub = s ? (s.score * (r.count || 0)) : 0;
+    const subStr = sub % 1 === 0 ? sub.toString() : sub.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
     const displayName = s ? `${s.name}（${s.score}分/副）` : '';
     return `<tr>
       <td><div class="style-search" id="ss-${i}">
@@ -1738,8 +1739,8 @@ function renderStyleRows() {
           onblur="setTimeout(function(){closeStyleSearch(${i});},200)">
         <div class="style-search-list" id="ss-list-${i}"></div>
       </div></td>
-      <td><input type="number" value="${r.count}" min="1" step="1" oninput="updateRowCount(${i}, this.value)" style="width:80px;"></td>
-      <td style="color:var(--primary-dark);font-weight:600;">${sub}</td>
+      <td><input type="number" value="${r.count}" min="0.1" step="0.1" oninput="updateRowCount(${i}, this.value)" style="width:80px;"></td>
+      <td style="color:var(--primary-dark);font-weight:600;">${subStr}</td>
       <td><button class="btn btn-sm btn-danger" onclick="delStyleRow(${i})">删除</button></td>
     </tr>`;
   }).join('');
@@ -1782,22 +1783,25 @@ function pickStyleSearch(i, styleId) {
   const input = document.querySelector('#ss-' + i + ' input');
   if (input && s) input.value = `${s.name}（${s.score}分/副）`;
   closeStyleSearch(i);
-  // 更新小计
-  const sub = s ? (s.score * (styleRows[i].count || 0)).toFixed(2) : '0';
+  // 更新小计（保留原始小数）
+  const sub = s ? (s.score * (styleRows[i].count || 0)) : 0;
+  const subStr = sub % 1 === 0 ? sub.toString() : sub.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
   const td = input.closest('td').nextElementSibling.nextElementSibling;
-  if (td) td.textContent = sub;
+  if (td) td.textContent = subStr;
   updatePreview();
 }
 function updateRowStyle(i, val) { styleRows[i].styleId = val; renderStyleRows(); }
 function updateRowCount(i, val) {
-  styleRows[i].count = Math.max(1, parseInt(val) || 1);
+  // 允许小数，不强制整数，最小 0.1
+  styleRows[i].count = Math.max(0.1, parseFloat(val) || 0.1);
   // 只更新小计，不重新渲染（避免输入框失焦）
   const s = DB.styles.find(x => x.id === styleRows[i].styleId);
-  const sub = s ? (s.score * (styleRows[i].count || 0)).toFixed(2) : '0';
+  const sub = s ? (s.score * (styleRows[i].count || 0)) : 0;
+  const subStr = sub % 1 === 0 ? sub.toString() : sub.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
   const input = document.querySelector('#ss-' + i + ' input');
   if (input) {
     const td = input.closest('td').nextElementSibling.nextElementSibling;
-    if (td) td.textContent = sub;
+    if (td) td.textContent = subStr;
   }
   updatePreview();
 }
@@ -1814,11 +1818,11 @@ function addRecord() {
   let added = 0, totalScore = 0;
   const ts = Date.now();
   styleRows.forEach(r => {
-    const count = parseInt(r.count);
-    if (!count || count < 1) return;
+    const count = parseFloat(r.count);
+    if (!count || count < 0.1) return;
     const style = DB.styles.find(s => s.id === r.styleId);
     if (!style) return;
-    const score = +(style.score * count).toFixed(2);
+    const score = +(style.score * count); // 不强制两位小数，保留原始精度
     DB.records.push({
       id: uid(), artistId, styleId: r.styleId, count, score, date, note, ts: ts + added
     });
@@ -1832,7 +1836,7 @@ function addRecord() {
   styleRows = [];
   document.getElementById('rec-note').value = '';
   renderStyleRows();
-  toast(`录入成功：${added} 条记录，共 ${totalScore.toFixed(2)} 分`);
+  toast(`录入成功：${added} 条记录，共 ${+totalScore.toFixed(2)} 分`);
   renderAll();
 }
 function delRecord(id) {
@@ -1921,11 +1925,12 @@ function updatePreview() {
   let total = 0, valid = 0;
   styleRows.forEach(r => {
     const s = DB.styles.find(x => x.id === r.styleId);
-    const c = parseInt(r.count) || 0;
+    const c = parseFloat(r.count) || 0;
     if (s && c > 0) { total += s.score * c; valid++; }
   });
   if (valid > 0) {
-    el.innerHTML = `共 <strong style="color:var(--primary)">${valid}</strong> 个款式，预计总积分：<strong style="color:var(--primary)">${total.toFixed(2)}</strong> 分`;
+    const totalStr = total % 1 === 0 ? total.toString() : +total.toFixed(2);
+    el.innerHTML = `共 <strong style="color:var(--primary)">${valid}</strong> 个款式，预计总积分：<strong style="color:var(--primary)">${totalStr}</strong> 分`;
   } else {
     el.textContent = '';
   }
