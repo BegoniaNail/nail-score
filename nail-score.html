@@ -797,6 +797,12 @@ async function pullCloud() {
     const data = await res.json();
     if (data && data.styles) {
       DB = data;
+      if (!DB.admins) DB.admins = []; // 兼容旧数据
+      if (!DB.admins.length) {
+        // 没有管理员，创建默认主管理员
+        DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
+        pushCloud();
+      }
       saveLocal();
       renderAll();
     }
@@ -1850,13 +1856,19 @@ if (DB.artists.length) {
 // 异步从云端拉取最新数据（覆盖本地）
 pullCloud().then(ok => {
   if (ok) {
+    // 云端拉取后确保至少有一个主管理员
+    if (!DB.admins || !DB.admins.length) {
+      seedIfEmpty();
+      saveLocal();
+      pushCloud();
+    }
     // 云端有数据则用云端的；若云端为空且本地有示例数据，推送到云端
     if ((!DB.styles.length && !DB.artists.length && !DB.records.length)) {
       seedIfEmpty();
       saveLocal();
       pushCloud();
-      renderAll();
     }
+    renderAll();
     // 云端拉取后，确保每日统计默认选中第一位美甲师
     if (DB.artists.length && !document.getElementById('daily-artist').value) {
       document.getElementById('daily-artist').value = DB.artists[0].id;
