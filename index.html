@@ -407,7 +407,7 @@
         <div class="nav-group" data-group="query">
           <div class="nav-group-title" onclick="toggleGroup(this)">查询系统 <span class="arrow">▼</span></div>
           <div class="nav-group-items">
-            <button class="tab active" data-tab="daily">📊 每日统计</button>
+            <button class="tab" data-tab="daily">📊 每日统计</button>
             <button class="tab" data-tab="stylescore">💎 款式计分</button>
             <button class="tab" data-tab="detail">📋 明细记录</button>
           </div>
@@ -415,7 +415,7 @@
         <div class="nav-group collapsed" data-group="input">
           <div class="nav-group-title" onclick="toggleGroup(this)">录入系统 <span class="arrow">▼</span></div>
           <div class="nav-group-items">
-            <button class="tab" data-tab="record">📝 计分录入</button>
+            <button class="tab active" data-tab="record">📝 计分录入</button>
             <button class="tab" data-tab="styles">🎨 款式管理</button>
             <button class="tab" data-tab="artists">👤 美甲师管理</button>
             <button class="tab" data-tab="designers">👠 打版师管理</button>
@@ -442,7 +442,7 @@
     <main class="content-area">
 
   <!-- 计分录入 -->
-  <div class="panel" id="panel-record">
+  <div class="panel active" id="panel-record">
     <div class="card">
       <h2>新增计分记录</h2>
       <div class="form-row">
@@ -630,7 +630,7 @@
   </div>
 
   <!-- 每日统计 -->
-  <div class="panel active" id="panel-daily">
+  <div class="panel" id="panel-daily">
     <div class="card">
       <h2>📊 每日统计</h2>
       <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">美甲师查看自己当天的副数、积分及本月累计</p>
@@ -1049,8 +1049,8 @@ function doLogout() {
   clearSession();
   toast('已退出登录');
   updateLoginStatus();
-  // 退到每日统计页
-  const t = document.querySelector('[data-tab="daily"]');
+  // 退到计分录入页
+  const t = document.querySelector('[data-tab="record"]');
   if (t) t.click();
 }
 
