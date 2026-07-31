@@ -449,6 +449,11 @@
           <div class="nav-group-title" onclick="toggleGroup(this)">管理系统 <span class="arrow">▼</span></div>
           <div class="nav-group-items">
             <button class="tab" data-tab="admin">🔐 管理员设置</button>
+          </div>
+        </div>
+        <div class="nav-group" data-group="sync" id="sync-group" style="display:none;">
+          <div class="nav-group-title" onclick="toggleGroup(this)">同步设置 <span class="arrow">▼</span></div>
+          <div class="nav-group-items">
             <button class="tab" data-tab="synconfig">☁️ 数据同步设置</button>
           </div>
         </div>
@@ -1332,15 +1337,19 @@ function currentAdmin() { return getSession(); }
 function updateLoginStatus() {
   const el = document.getElementById('login-status');
   const adminGroup = document.getElementById('admin-group');
+  const syncGroup = document.getElementById('sync-group');
   const s = getSession();
   if (s) {
     const role = s.isMaster ? '主管理员' : '管理员';
     el.innerHTML = `<span style="color:var(--primary-dark);">👤 ${s.name}（${role}）</span> <button class="btn btn-sm" style="background:#eee;margin-left:6px;" onclick="doLogout()">退出</button>`;
     // 主管理员才显示管理系统菜单
     if (adminGroup) adminGroup.style.display = s.isMaster ? '' : 'none';
+    // 所有登录用户都能看到同步设置
+    if (syncGroup) syncGroup.style.display = '';
   } else {
     el.innerHTML = `<button class="btn btn-sm btn-primary" onclick="openLogin()">🔐 点击登录</button>`;
     if (adminGroup) adminGroup.style.display = 'none';
+    if (syncGroup) syncGroup.style.display = 'none';
   }
 }
 
