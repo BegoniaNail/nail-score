@@ -1326,10 +1326,10 @@ const CONFIRM_KEY = 'nailDeleteConfirmed'; // 删除密码已验证标记
 let pendingTab = null; // 待切换的tab（登录后恢复）
 
 function getSession() {
-  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch(e) { return null; }
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch(e) { return null; }
 }
-function setSession(s) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
-function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
+function setSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
 
 function isLoggedIn() { return !!getSession(); }
 function isMaster() { const s = getSession(); return s && s.isMaster; }
