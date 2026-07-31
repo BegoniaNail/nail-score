@@ -546,7 +546,7 @@
       </div>
     </div>
     <div class="card">
-      <h2>美甲师列表</h2>
+      <h2>美甲师列表 <span id="artist-count" style="font-size:14px;color:var(--primary);font-weight:600;margin-left:8px;background:var(--primary-light);padding:3px 12px;border-radius:12px;">0人</span></h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>头像</th><th>姓名</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
@@ -2012,6 +2012,8 @@ function renderStyles() {
 
 function renderArtists() {
   const el = document.getElementById('artist-list');
+  const countEl = document.getElementById('artist-count');
+  if (countEl) countEl.textContent = DB.artists.length + '人';
   if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无美甲师</td></tr>`; return; }
   el.innerHTML = DB.artists.map(a => {
     const recs = DB.records.filter(r => r.artistId === a.id);
