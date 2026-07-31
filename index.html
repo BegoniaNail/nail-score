@@ -543,6 +543,14 @@
           <label>美甲师姓名</label>
           <input type="text" id="artist-name" placeholder="如：小美">
         </div>
+        <div class="form-group">
+          <label>生日</label>
+          <input type="date" id="artist-birthday">
+        </div>
+        <div class="form-group">
+          <label>入职时间</label>
+          <input type="date" id="artist-joindate">
+        </div>
         <button class="btn btn-primary" onclick="addArtist()">+ 添加</button>
       </div>
     </div>
@@ -550,7 +558,7 @@
       <h2>美甲师列表 <span id="artist-count" style="font-size:14px;color:var(--primary);font-weight:600;margin-left:8px;background:var(--primary-light);padding:3px 12px;border-radius:12px;">0人</span></h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>头像</th><th>姓名</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
+          <thead><tr><th>头像</th><th>姓名</th><th>生日</th><th>入职时间</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
           <tbody id="artist-list"></tbody>
         </table>
       </div>
@@ -949,6 +957,16 @@
     <div class="form-group">
       <label>姓名</label>
       <input type="text" id="edit-artist-name">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>生日</label>
+        <input type="date" id="edit-artist-birthday">
+      </div>
+      <div class="form-group">
+        <label>入职时间</label>
+        <input type="date" id="edit-artist-joindate">
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-artist')">取消</button>
@@ -1652,9 +1670,13 @@ function addArtist() {
   const name = document.getElementById('artist-name').value.trim();
   if (!name) return toast('请输入姓名');
   if (DB.artists.some(a => a.name === name)) return toast('美甲师已存在');
-  DB.artists.push({ id: uid(), name, avatar: pendingAddAvatar || '' });
+  const birthday = document.getElementById('artist-birthday').value || '';
+  const joinDate = document.getElementById('artist-joindate').value || '';
+  DB.artists.push({ id: uid(), name, avatar: pendingAddAvatar || '', birthday, joinDate });
   save();
   document.getElementById('artist-name').value = '';
+  document.getElementById('artist-birthday').value = '';
+  document.getElementById('artist-joindate').value = '';
   clearAddAvatar();
   toast('美甲师已添加'); renderAll();
 }
@@ -1663,6 +1685,8 @@ function editArtist(id) {
   const a = DB.artists.find(x => x.id === id);
   if (!a) return;
   document.getElementById('edit-artist-name').value = a.name;
+  document.getElementById('edit-artist-birthday').value = a.birthday || '';
+  document.getElementById('edit-artist-joindate').value = a.joinDate || '';
   pendingEditAvatar = '';
   const el = document.getElementById('edit-avatar-preview');
   el.innerHTML = a.avatar ? `<img src="${a.avatar}" class="avatar">` : `<span class="avatar-placeholder">${a.name[a.name.length - 1]}</span>`;
@@ -1677,6 +1701,8 @@ function saveArtistEdit() {
   const name = document.getElementById('edit-artist-name').value.trim();
   if (!name) return toast('请输入姓名');
   a.name = name;
+  a.birthday = document.getElementById('edit-artist-birthday').value || '';
+  a.joinDate = document.getElementById('edit-artist-joindate').value || '';
   if (pendingEditAvatar) a.avatar = pendingEditAvatar;
   save(); closeModal('modal-artist');
   pendingEditAvatar = '';
@@ -2018,7 +2044,7 @@ function renderArtists() {
   const el = document.getElementById('artist-list');
   const countEl = document.getElementById('artist-count');
   if (countEl) countEl.textContent = DB.artists.length + '人';
-  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无美甲师</td></tr>`; return; }
+  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="7" class="empty">暂无美甲师</td></tr>`; return; }
   el.innerHTML = DB.artists.map(a => {
     const recs = DB.records.filter(r => r.artistId === a.id);
     const totalScore = recs.reduce((s,r) => s+r.score, 0);
@@ -2026,6 +2052,8 @@ function renderArtists() {
     return `<tr>
       <td>${avatarHTML(a, 'avatar-sm')}</td>
       <td>${a.name}</td>
+      <td>${a.birthday || '-'}</td>
+      <td>${a.joinDate || '-'}</td>
       <td>${fmt(totalScore)}</td>
       <td>${totalCount}</td>
       <td>
