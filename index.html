@@ -518,6 +518,7 @@
     </div>
     <div class="card">
       <h2>款式列表</h2>
+      <input type="text" id="style-search" placeholder="🔍 搜索款式名称..." oninput="renderStyles()" style="width:100%;margin-bottom:12px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;">
       <div class="table-wrap">
         <table>
           <thead><tr><th>款式名称</th><th>每副积分</th><th>打版师</th><th>打版日期</th><th>操作</th></tr></thead>
@@ -1997,7 +1998,10 @@ function updatePreview() {
 function renderStyles() {
   const el = document.getElementById('style-list');
   if (!DB.styles.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无款式，请先添加</td></tr>`; return; }
-  el.innerHTML = DB.styles.map(s => `
+  const kw = (document.getElementById('style-search')?.value || '').trim().toLowerCase();
+  const styles = kw ? DB.styles.filter(s => s.name.toLowerCase().includes(kw) || (s.designer||'').toLowerCase().includes(kw)) : DB.styles;
+  if (!styles.length) { el.innerHTML = `<tr><td colspan="5" class="empty">未找到匹配的款式</td></tr>`; return; }
+  el.innerHTML = styles.map(s => `
     <tr>
       <td><span class="badge">${s.name}</span></td>
       <td>${s.score}</td>
