@@ -18,7 +18,8 @@
 <meta name="apple-mobile-web-app-title" content="美甲计分统计">
 <meta name="theme-color" content="#783c48">
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root {
     --bg: #f8f3f3;
@@ -3011,49 +3012,51 @@ function downloadAllDailyImages() {
   const container = document.getElementById('daily-content');
   const artists = DB.artists;
   let idx = 0;
+  const zip = new JSZip();
+  const folderName = `每日统计_${date}`;
+  const folder = zip.folder(folderName);
 
   toast(`正在生成 1/${artists.length}…`);
 
-  // 逐个美甲师：渲染 → 截图 → 下载 → 下一个
   function next() {
     if (idx >= artists.length) {
       // 恢复原来选中的美甲师显示
       const curId = document.getElementById('daily-artist').value;
       container.innerHTML = buildDailyHTML(curId, date);
-      toast('全部下载完成');
+      toast('正在打包下载…');
+      zip.generateAsync({ type: 'blob' }).then(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = folderName + '.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast('全部下载完成');
+      });
       return;
     }
     const artist = artists[idx];
-    // 渲染当前美甲师的统计
     container.innerHTML = buildDailyHTML(artist.id, date);
     toast(`正在生成 ${idx + 1}/${artists.length}：${artist.name}…`);
 
-    // 等待 DOM 渲染完成后截图
     setTimeout(function() {
       html2canvas(container, {
         scale: 2,
         backgroundColor: '#f8f3f3',
         useCORS: true
       }).then(function(canvas) {
-        const filename = `每日统计_${artist.name}_${date}.png`;
         canvas.toBlob(function(blob) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(url), 500);
+          folder.file(`每日统计_${artist.name}_${date}.png`, blob);
           idx++;
-          // 间隔一小段时间再下一个，避免浏览器拦截多文件下载
-          setTimeout(next, 600);
+          setTimeout(next, 100);
         }, 'image/png');
       }).catch(function(err) {
         console.error(err);
         toast(`生成 ${artist.name} 图片失败，跳过`);
         idx++;
-        setTimeout(next, 600);
+        setTimeout(next, 100);
       });
     }, 200);
   }
