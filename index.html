@@ -580,6 +580,14 @@
           <label>打版师姓名</label>
           <input type="text" id="designer-name" placeholder="如：小美">
         </div>
+        <div class="form-group">
+          <label>生日</label>
+          <input type="date" id="designer-birthday">
+        </div>
+        <div class="form-group">
+          <label>入职时间</label>
+          <input type="date" id="designer-joindate">
+        </div>
         <button class="btn btn-primary" onclick="addDesigner()">+ 添加</button>
       </div>
     </div>
@@ -587,7 +595,7 @@
       <h2>打版师列表 <span id="designer-count" style="font-size:14px;color:var(--primary);font-weight:600;margin-left:8px;background:var(--primary-light);padding:3px 12px;border-radius:12px;">0人</span></h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>头像</th><th>姓名</th><th>打版款式数</th><th>操作</th></tr></thead>
+          <thead><tr><th>头像</th><th>姓名</th><th>生日</th><th>入职时间</th><th>打版款式数</th><th>操作</th></tr></thead>
           <tbody id="designer-list"></tbody>
         </table>
       </div>
@@ -986,6 +994,16 @@
     <div class="form-group">
       <label>姓名</label>
       <input type="text" id="edit-designer-name">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>生日</label>
+        <input type="date" id="edit-designer-birthday">
+      </div>
+      <div class="form-group">
+        <label>入职时间</label>
+        <input type="date" id="edit-designer-joindate">
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-sm" style="background:#eee" onclick="closeModal('modal-designer')">取消</button>
@@ -1751,9 +1769,13 @@ function addDesigner() {
   const name = document.getElementById('designer-name').value.trim();
   if (!name) return toast('请输入姓名');
   if (DB.designers.some(d => d.name === name)) return toast('打版师已存在');
-  DB.designers.push({ id: uid(), name, avatar: pendingAddDesignerAvatar || '' });
+  const birthday = document.getElementById('designer-birthday').value || '';
+  const joinDate = document.getElementById('designer-joindate').value || '';
+  DB.designers.push({ id: uid(), name, avatar: pendingAddDesignerAvatar || '', birthday, joinDate });
   save();
   document.getElementById('designer-name').value = '';
+  document.getElementById('designer-birthday').value = '';
+  document.getElementById('designer-joindate').value = '';
   clearAddDesignerAvatar();
   toast('打版师已添加'); renderAll();
 }
@@ -1762,6 +1784,8 @@ function editDesigner(id) {
   const d = DB.designers.find(x => x.id === id);
   if (!d) return;
   document.getElementById('edit-designer-name').value = d.name;
+  document.getElementById('edit-designer-birthday').value = d.birthday || '';
+  document.getElementById('edit-designer-joindate').value = d.joinDate || '';
   pendingEditDesignerAvatar = '';
   const el = document.getElementById('edit-designer-avatar-preview');
   el.innerHTML = d.avatar ? `<img src="${d.avatar}" class="avatar">` : `<span class="avatar-placeholder">${d.name[d.name.length - 1]}</span>`;
@@ -1776,6 +1800,8 @@ function saveDesignerEdit() {
   const name = document.getElementById('edit-designer-name').value.trim();
   if (!name) return toast('请输入姓名');
   d.name = name;
+  d.birthday = document.getElementById('edit-designer-birthday').value || '';
+  d.joinDate = document.getElementById('edit-designer-joindate').value || '';
   if (pendingEditDesignerAvatar) d.avatar = pendingEditDesignerAvatar;
   save(); closeModal('modal-designer');
   pendingEditDesignerAvatar = '';
@@ -2068,12 +2094,14 @@ function renderDesigners() {
   const el = document.getElementById('designer-list');
   const countEl = document.getElementById('designer-count');
   if (countEl) countEl.textContent = DB.designers.length + '人';
-  if (!DB.designers.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无打版师</td></tr>`; return; }
+  if (!DB.designers.length) { el.innerHTML = `<tr><td colspan="6" class="empty">暂无打版师</td></tr>`; return; }
   el.innerHTML = DB.designers.map(d => {
     const styleCount = DB.styles.filter(s => s.designer === d.name).length;
     return `<tr>
       <td>${avatarHTML(d, 'avatar-sm')}</td>
       <td>${d.name}</td>
+      <td>${d.birthday || '-'}</td>
+      <td>${d.joinDate || '-'}</td>
       <td>${styleCount}</td>
       <td>
         <button class="btn btn-sm btn-edit" onclick="editDesigner('${d.id}')">编辑</button>
