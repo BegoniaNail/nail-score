@@ -575,7 +575,7 @@
       </div>
     </div>
     <div class="card">
-      <h2>打版师列表</h2>
+      <h2>打版师列表 <span id="designer-count" style="font-size:14px;color:var(--primary);font-weight:600;margin-left:8px;background:var(--primary-light);padding:3px 12px;border-radius:12px;">0人</span></h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>头像</th><th>姓名</th><th>打版款式数</th><th>操作</th></tr></thead>
@@ -2034,6 +2034,8 @@ function renderArtists() {
 
 function renderDesigners() {
   const el = document.getElementById('designer-list');
+  const countEl = document.getElementById('designer-count');
+  if (countEl) countEl.textContent = DB.designers.length + '人';
   if (!DB.designers.length) { el.innerHTML = `<tr><td colspan="4" class="empty">暂无打版师</td></tr>`; return; }
   el.innerHTML = DB.designers.map(d => {
     const styleCount = DB.styles.filter(s => s.designer === d.name).length;
