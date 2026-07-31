@@ -2053,15 +2053,9 @@ function renderDesigners() {
 
 function renderRecordPanel() {
   // 统计卡片
-  const totalScore = DB.records.reduce((s,r) => s+r.score, 0);
-  const totalCount = DB.records.reduce((s,r) => s+r.count, 0);
-  const todayCount = DB.records.filter(r => r.date === todayStr()).reduce((s,r) => s+r.count, 0);
   document.getElementById('rec-stats').innerHTML = `
     <div class="stat-card"><div class="num">${DB.artists.length}</div><div class="label">美甲师数</div></div>
     <div class="stat-card"><div class="num">${DB.styles.length}</div><div class="label">款式数</div></div>
-    <div class="stat-card"><div class="num">${totalCount}</div><div class="label">累计副数</div></div>
-    <div class="stat-card"><div class="num">${fmt(totalScore)}</div><div class="label">累计积分</div></div>
-    <div class="stat-card"><div class="num">${todayCount}</div><div class="label">今日副数</div></div>
   `;
   // 最近记录
   const el = document.getElementById('rec-recent');
