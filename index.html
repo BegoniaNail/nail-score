@@ -1174,29 +1174,22 @@ async function pushGitHub() {
 // ===== jsonblob 备用存储 =====
 async function pullJsonblob() {
   try {
-    const res = await fetch(JSONBLOB_API, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error('jsonblob pull failed: ' + res.status);
+    // jsonblob bin 可能已过期，改用 GitHub raw URL 读取（不受 API 速率限制）
+    const res = await fetch(`https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/${GH_DATA_PATH}?t=${Date.now()}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) throw new Error('raw pull failed: ' + res.status);
     return await res.json();
   } catch(e) {
-    console.error('jsonblob pull error', e);
+    console.error('备用拉取 error', e);
     return null;
   }
 }
 async function pushJsonblob() {
-  try {
-    const res = await fetch(JSONBLOB_API, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(DB)
-    });
-    if (!res.ok) throw new Error('jsonblob push failed: ' + res.status);
-    setSync('ok');
-    return true;
-  } catch(e) {
-    console.error('jsonblob push error', e);
-    setSync('offline');
-    return false;
-  }
+  // jsonblob bin 已失效，备用推送暂不可用
+  // raw.githubusercontent.com 是只读的，不能用于推送
+  // GitHub 主推送成功即可，不需要备用推送
+  return false;
 }
 
 // ===== 统一的拉取/推送接口 =====
@@ -1240,7 +1233,7 @@ async function pullCloud() {
 let pushRetryCount = 0; // 推送重试次数
 
 async function pushCloud() {
-  // 优先 GitHub，失败自动 fallback 到 jsonblob
+  // 推送到 GitHub
   const ok = await pushGitHub();
   if (!ok) {
     // 推送失败，10 秒后自动重试（最多 2 次，避免无限循环）
@@ -3202,7 +3195,8 @@ pullCloud().then(ok => {
     }
   }
 });
-// 每60秒自动同步：先推送本地修改，再拉取云端更新
+// 每120秒自动同步：先推送本地修改，再拉取云端更新
+// （降低频率避免 GitHub API 速率限制：未认证 60次/小时）
 setInterval(async () => {
   // 如果本地有未推送的修改，先推送
   if (lastSaveTime > lastPushTime) {
@@ -3210,7 +3204,7 @@ setInterval(async () => {
   }
   // 再拉取云端（mergeCloudData 会保护本地未推送的修改）
   await pullCloud();
-}, 60000);
+}, 120000);
 </script>
 </body>
 </html>
