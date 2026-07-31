@@ -631,7 +631,10 @@
       <h2>💎 款式计分查询</h2>
       <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">查看所有款式的积分标准和打版日期</p>
       <div class="filter-bar">
-        <input type="text" id="stylescore-search" placeholder="🔍 搜索款式名称..." oninput="renderStyleScore()" style="flex:1;min-width:160px;">
+        <input type="text" id="stylescore-search" placeholder="🔍 搜索款式名称..." oninput="renderStyleScore()" style="flex:1;min-width:120px;">
+        <select id="stylescore-filter" onchange="renderStyleScore()">
+          <option value="">全部积分</option>
+        </select>
         <select id="stylescore-sort" onchange="renderStyleScore()">
           <option value="name">按名称排序</option>
           <option value="score-desc">按积分从高到低</option>
@@ -3063,7 +3066,15 @@ function renderStyleScore() {
     document.getElementById('stylescore-summary').textContent = '';
     return;
   }
+  // 动态填充积分筛选选项
+  const filterEl = document.getElementById('stylescore-filter');
+  const currentFilter = filterEl.value;
+  const scores = [...new Set(DB.styles.map(s => s.score))].sort((a,b) => a-b);
+  filterEl.innerHTML = '<option value="">全部积分</option>' + scores.map(sc => `<option value="${sc}">${sc}分</option>`).join('');
+  filterEl.value = currentFilter;
+
   const keyword = (document.getElementById('stylescore-search').value || '').trim().toLowerCase();
+  const scoreFilter = filterEl.value;
   const sort = document.getElementById('stylescore-sort').value;
 
   let data = DB.styles.map(s => ({
@@ -3076,6 +3087,8 @@ function renderStyleScore() {
 
   // 搜索筛选
   if (keyword) data = data.filter(s => s.name.toLowerCase().includes(keyword));
+  // 积分筛选
+  if (scoreFilter) data = data.filter(s => String(s.score) === scoreFilter);
 
   // 排序
   data.sort((a, b) => {
