@@ -558,7 +558,7 @@
       <h2>美甲师列表 <span id="artist-count" style="font-size:14px;color:var(--primary);font-weight:600;margin-left:8px;background:var(--primary-light);padding:3px 12px;border-radius:12px;">0人</span></h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>头像</th><th>姓名</th><th>生日</th><th>入职时间</th><th>累计积分</th><th>累计副数</th><th>操作</th></tr></thead>
+          <thead><tr><th>头像</th><th>姓名</th><th>生日</th><th>入职时间</th><th>操作</th></tr></thead>
           <tbody id="artist-list"></tbody>
         </table>
       </div>
@@ -2070,18 +2070,13 @@ function renderArtists() {
   const el = document.getElementById('artist-list');
   const countEl = document.getElementById('artist-count');
   if (countEl) countEl.textContent = DB.artists.length + '人';
-  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="7" class="empty">暂无美甲师</td></tr>`; return; }
+  if (!DB.artists.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无美甲师</td></tr>`; return; }
   el.innerHTML = DB.artists.map(a => {
-    const recs = DB.records.filter(r => r.artistId === a.id);
-    const totalScore = recs.reduce((s,r) => s+r.score, 0);
-    const totalCount = recs.reduce((s,r) => s+r.count, 0);
     return `<tr>
       <td>${avatarHTML(a, 'avatar-sm')}</td>
       <td>${a.name}</td>
       <td>${a.birthday || '-'}</td>
       <td>${a.joinDate || '-'}</td>
-      <td>${fmt(totalScore)}</td>
-      <td>${totalCount}</td>
       <td>
         <button class="btn btn-sm btn-edit" onclick="editArtist('${a.id}')">编辑</button>
         <button class="btn btn-sm btn-danger" onclick="delArtist('${a.id}')">删除</button>
