@@ -53,7 +53,7 @@
   .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
   .layout { display: flex; gap: 20px; align-items: flex-start; }
   .sidebar {
-    width: 96px;
+    width: 120px;
     flex-shrink: 0;
     background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
     border-radius: var(--radius);
@@ -103,7 +103,7 @@
   }
   .tabs { display: flex; flex-direction: column; gap: 2px; }
   .tab {
-    padding: 8px 4px;
+    padding: 8px 10px;
     border: none;
     background: transparent;
     color: rgba(255, 255, 255, 0.9);
@@ -113,13 +113,12 @@
     text-align: center;
     transition: all 0.2s;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    word-break: keep-all;
-    line-height: 1.15;
-    padding: 8px 4px;
+    gap: 4px;
+    white-space: nowrap;
+    line-height: 1.2;
   }
   .tab:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
   .tab.active { background: rgba(255, 255, 255, 0.95); color: var(--primary-dark); font-weight: 600; }
@@ -387,7 +386,9 @@
       line-height: 1.15;
       border-radius: 6px;
       gap: 2px;
+      flex-direction: column;
       word-break: keep-all;
+      white-space: normal;
     }
     .container { padding: 10px; }
     .content-area { min-width: 0; }
