@@ -2843,7 +2843,7 @@ function exportAllDesignerStatExcel() {
 }
 
 // ===== 每日统计 =====
-function buildDailyHTML(artistId, date) {
+function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
   const artist = DB.artists.find(a => a.id === artistId);
   if (!artist) return '';
   const sm = styleMap();
@@ -2920,29 +2920,31 @@ function buildDailyHTML(artistId, date) {
   html += `</div>`;
 
   // 本月每日趋势（小卡片）
-  const dayMap = {};
-  monthRecs.forEach(r => {
-    if (!dayMap[r.date]) dayMap[r.date] = { count: 0, score: 0 };
-    dayMap[r.date].count += r.count;
-    dayMap[r.date].score = fmt(dayMap[r.date].score + r.score);
-  });
-  const dayKeys = Object.keys(dayMap).sort();
-  if (dayKeys.length > 1) {
-    html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);margin-top:16px;">
-      <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">本月每日明细</h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>日期</th><th>副数</th><th>积分</th></tr></thead><tbody>`;
-    dayKeys.forEach(k => {
-      const [yy,mm,dd] = k.split('-').map(n => parseInt(n));
-      const isToday = k === date;
-      html += `<tr ${isToday ? 'style="background:var(--primary-light);font-weight:600;"' : ''}>
-        <td>${yy}.${mm}.${dd}${isToday ? ' （今天）' : ''}</td>
-        <td>${dayMap[k].count}</td>
-        <td>${fmt(dayMap[k].score)}</td>
-      </tr>`;
+  if (showMonthlyDetail) {
+    const dayMap = {};
+    monthRecs.forEach(r => {
+      if (!dayMap[r.date]) dayMap[r.date] = { count: 0, score: 0 };
+      dayMap[r.date].count += r.count;
+      dayMap[r.date].score = fmt(dayMap[r.date].score + r.score);
     });
-    html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${fmt(monthScore)}</td></tr>`;
-    html += `</tbody></table></div></div>`;
+    const dayKeys = Object.keys(dayMap).sort();
+    if (dayKeys.length > 1) {
+      html += `<div class="card" style="box-shadow:none;border:1px solid var(--border);margin-top:16px;">
+        <h2 style="border:none;padding-bottom:0;margin-bottom:12px;">本月每日明细</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>日期</th><th>副数</th><th>积分</th></tr></thead><tbody>`;
+      dayKeys.forEach(k => {
+        const [yy,mm,dd] = k.split('-').map(n => parseInt(n));
+        const isToday = k === date;
+        html += `<tr ${isToday ? 'style="background:var(--primary-light);font-weight:600;"' : ''}>
+          <td>${yy}.${mm}.${dd}${isToday ? ' （今天）' : ''}</td>
+          <td>${dayMap[k].count}</td>
+          <td>${fmt(dayMap[k].score)}</td>
+        </tr>`;
+      });
+      html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${fmt(monthScore)}</td></tr>`;
+      html += `</tbody></table></div></div>`;
+    }
   }
 
   return html;
@@ -2979,15 +2981,19 @@ function downloadDailyImage() {
   if (!target) return;
   const artistId = document.getElementById('daily-artist').value;
   if (!artistId) return toast('请先选择美甲师');
+  const date = document.getElementById('daily-date').value || todayStr();
   toast('正在生成图片…');
+  // 渲染不含本月每日明细的版本用于截图
+  target.innerHTML = buildDailyHTML(artistId, date, false);
   html2canvas(target, {
     scale: 2,
     backgroundColor: '#f8f3f3',
     useCORS: true
   }).then(function(canvas) {
+    // 恢复完整显示
+    target.innerHTML = buildDailyHTML(artistId, date, true);
     const artist = DB.artists.find(a => a.id === artistId);
     const artistName = artist ? artist.name : '美甲师';
-    const date = document.getElementById('daily-date').value || todayStr();
     const filename = `每日统计_${artistName}_${date}.png`;
     canvas.toBlob(function(blob) {
       const url = URL.createObjectURL(blob);
@@ -3039,7 +3045,7 @@ function downloadAllDailyImages() {
       return;
     }
     const artist = artists[idx];
-    container.innerHTML = buildDailyHTML(artist.id, date);
+    container.innerHTML = buildDailyHTML(artist.id, date, false);
     toast(`正在生成 ${idx + 1}/${artists.length}：${artist.name}…`);
 
     setTimeout(function() {
