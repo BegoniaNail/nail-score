@@ -1313,9 +1313,8 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function fmt(n) {
   if (n == null || isNaN(n)) return '0';
   n = +n;
-  // 先截断到两位小数（不四舍五入）
-  n = Math.floor(n * 100) / 100;
-  // 去掉多余尾零
+  // 使用 toFixed(2) 四舍五入到两位小数，解决浮点精度问题（如 1.2+0.12=1.319999→1.32）
+  // 然后去掉多余尾零
   return (parseFloat(n.toFixed(2))).toString();
 }
 
@@ -2270,10 +2269,11 @@ function renderCross() {
       const recs = DB.records.filter(r => r.styleId === s.id && r.artistId === a.id);
       const count = recs.reduce((sum,r)=>sum+r.count,0);
       const score = recs.reduce((sum,r)=>sum+r.score,0);
-      const val = mode === 'count' ? count : fmt(score);
+      const val = mode === 'count' ? count : score; // 保留数值类型用于累加
       rowTotal += val;
       colTotals[i] += val;
-      html += `<td>${val || '-'}</td>`;
+      const display = mode === 'count' ? count : fmt(score);
+      html += `<td>${display || '-'}</td>`;
     });
     html += `<td><strong>${fmt(rowTotal)}</strong></td></tr>`;
   });
@@ -2851,13 +2851,13 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
   // 当天记录
   const dayRecs = DB.records.filter(r => r.artistId === artistId && r.date === date);
   const dayCount = dayRecs.reduce((s,r) => s+r.count, 0);
-  const dayScore = fmt(dayRecs.reduce((s,r) => s+r.score, 0));
+  const dayScoreRaw = dayRecs.reduce((s,r) => s+r.score, 0); // 原始累加，不截断
 
   // 本月累计（按日期的年月）
   const month = date.substring(0, 7);
   const monthRecs = DB.records.filter(r => r.artistId === artistId && r.date.substring(0,7) === month);
   const monthCount = monthRecs.reduce((s,r) => s+r.count, 0);
-  const monthScore = fmt(monthRecs.reduce((s,r) => s+r.score, 0));
+  const monthScoreRaw = monthRecs.reduce((s,r) => s+r.score, 0); // 原始累加，不截断
 
   // 格式化日期显示 2026.7.26
   const [y,m,d] = date.split('-').map(n => parseInt(n));
@@ -2871,7 +2871,7 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
       styleSummary[r.styleId] = { name: s ? s.name : '已删除款式', count: 0, score: 0 };
     }
     styleSummary[r.styleId].count += r.count;
-    styleSummary[r.styleId].score = fmt(styleSummary[r.styleId].score + r.score);
+    styleSummary[r.styleId].score += r.score; // 原始累加，不截断
   });
 
   // 头像
@@ -2890,11 +2890,11 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
       <div style="display:flex;gap:24px;flex-wrap:wrap;">
         <div>
           <div style="font-size:13px;opacity:0.85;">当日质检合格数</div>
-          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${fmt(dayScore)} 分</div>
+          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${fmt(dayScoreRaw)} 分</div>
         </div>
         <div>
           <div style="font-size:13px;opacity:0.85;">本月累计积分</div>
-          <div style="font-size:24px;font-weight:700;">${fmt(monthScore)} 分</div>
+          <div style="font-size:24px;font-weight:700;">${fmt(monthScoreRaw)} 分</div>
           <div style="font-size:12px;opacity:0.7;">（本月共 ${monthCount} 幅）</div>
         </div>
       </div>
@@ -2914,7 +2914,7 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
     styleList.forEach(s => {
       html += `<tr><td>${s.name}</td><td>${s.count}</td><td>${fmt(s.score)}</td></tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>${dayCount}</td><td>${fmt(dayScore)}</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>${dayCount}</td><td>${fmt(dayScoreRaw)}</td></tr>`;
     html += `</tbody></table></div>`;
   }
   html += `</div>`;
@@ -2925,7 +2925,7 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
     monthRecs.forEach(r => {
       if (!dayMap[r.date]) dayMap[r.date] = { count: 0, score: 0 };
       dayMap[r.date].count += r.count;
-      dayMap[r.date].score = fmt(dayMap[r.date].score + r.score);
+      dayMap[r.date].score += r.score; // 原始累加，不截断
     });
     const dayKeys = Object.keys(dayMap).sort();
     if (dayKeys.length > 1) {
@@ -2942,7 +2942,7 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
           <td>${fmt(dayMap[k].score)}</td>
         </tr>`;
       });
-      html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${fmt(monthScore)}</td></tr>`;
+      html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${fmt(monthScoreRaw)}</td></tr>`;
       html += `</tbody></table></div></div>`;
     }
   }
