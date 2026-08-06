@@ -2055,7 +2055,16 @@ function renderStyles() {
   const el = document.getElementById('style-list');
   if (!DB.styles.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无款式，请先添加</td></tr>`; return; }
   const kw = (document.getElementById('style-search')?.value || '').trim().toLowerCase();
-  const styles = kw ? DB.styles.filter(s => s.name.toLowerCase().includes(kw) || (s.designer||'').toLowerCase().includes(kw)) : DB.styles;
+  let styles = kw ? DB.styles.filter(s => s.name.toLowerCase().includes(kw) || (s.designer||'').toLowerCase().includes(kw)) : DB.styles.slice();
+  // 按打版日期从最新到最旧排序（YYYY-MM-DD 格式可直接字符串比较；无日期的排到最后）
+  styles.sort((a, b) => {
+    const da = a.createDate || '';
+    const db = b.createDate || '';
+    if (da === db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return db.localeCompare(da);
+  });
   if (!styles.length) { el.innerHTML = `<tr><td colspan="5" class="empty">未找到匹配的款式</td></tr>`; return; }
   el.innerHTML = styles.map(s => `
     <tr>
