@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同步网络诊断</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#f8f3f3;margin:0;padding:16px;color:#333;}
+  h1{font-size:20px;color:#783c48;}
+  h2{font-size:15px;margin:20px 0 8px;color:#783c48;}
+  .card{background:#fff;border:1px solid #e5d9db;border-radius:10px;padding:14px;margin-bottom:12px;}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0e8ea;font-size:14px;}
+  .row:last-child{border-bottom:none;}
+  .badge{padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap;}
+  .ok{background:#d9f2e2;color:#1a7f37;}
+  .fail{background:#fde0e0;color:#c0505a;}
+  .wait{background:#f0e8ea;color:#888;}
+  .note{font-size:12px;color:#888;margin-top:4px;line-height:1.6;}
+  button{background:#783c48;color:#fff;border:none;border-radius:8px;padding:12px 20px;font-size:15px;cursor:pointer;margin:16px 0;}
+  button:disabled{opacity:.5;}
+  .detail{font-size:12px;color:#666;margin-top:4px;word-break:break-all;}
+</style>
+</head>
+<body>
+<h1>📡 同步网络诊断</h1>
+<p class="note">此页面只测试网络连通性，<b>不会上传、修改你的任何数据</b>。用于判断你的手机/电脑能否完成数据推送。</p>
+<button id="runBtn" onclick="runAll()">开始测试</button>
+
+<div id="results">
+  <h2>1. 读请求（拉取数据用）</h2>
+  <div class="card" id="read-card">
+    <div class="row"><span>GitHub API 读取 data.json</span><span class="badge wait" id="r1">待测</span></div>
+    <div class="row"><span>raw.githubusercontent.com 读取</span><span class="badge wait" id="r2">待测</span></div>
+  </div>
+  <h2>2. 写请求（推送数据用）⚠️ 关键</h2>
+  <div class="card" id="write-card">
+    <div class="row"><span>GitHub API 写入接口连通性</span><span class="badge wait" id="w1">待测</span></div>
+    <div class="detail" id="w1d"></div>
+    <div class="row"><span>GitHub API 认证(Token)是否有效</span><span class="badge wait" id="w2">待测</span></div>
+    <div class="detail" id="w2d"></div>
+  </div>
+</div>
+
+<div id="conclusion"></div>
+
+<script>
+const GH_API = 'https://api.github.com/repos/BegoniaNail/nail-score/contents/data.json';
+const RAW_URL = 'https://raw.githubusercontent.com/BegoniaNail/nail-score/main/data.json?t=' + Date.now();
+const TOKEN_KEY = 'nailScoreToken';
+const token = (function(){ try { return localStorage.getItem(TOKEN_KEY); } catch(e){ return null; } })();
+
+function badge(el, cls, text) {
+  const e = document.getElementById(el);
+  if (e) { e.className = 'badge ' + cls; e.textContent = text; }
+}
+function detail(id, txt) {
+  const e = document.getElementById(id);
+  if (e) e.innerHTML = txt;
+}
+
+async function testFetch(url, opts, timeoutMs) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs || 15000);
+  try {
+    const res = await fetch(url, Object.assign({ signal: controller.signal }, opts));
+    clearTimeout(t);
+    return { ok: res.ok, status: res.status, text: await res.text().catch(() => '') };
+  } catch (e) {
+    clearTimeout(t);
+    return { ok: false, status: 0, error: e.name + (e.message ? ': ' + e.message : '') };
+  }
+}
+
+async function runAll() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '测试中...';
+  document.getElementById('conclusion').innerHTML = '';
+
+  // 读请求
+  badge('r1', 'wait', '测试中');
+  let r = await testFetch(GH_API + '?ref=main', { headers: { 'Accept': 'application/vnd.github.v3+json' } }, 15000);
+  if (r.ok) {
+    badge('r1', 'ok', '✅ 通过 (' + r.status + ')');
+    try {
+      const j = JSON.parse(r.text);
+      detail('w1d', '');
+    } catch(e){}
+  } else {
+    badge('r1', 'fail', '❌ 失败 ' + (r.status || r.error || ''));
+    detail('w1d', r.status ? ('HTTP ' + r.status + '：' + r.text.slice(0,150)) : ('网络错误：' + (r.error||'')));
+  }
+
+  badge('r2', 'wait', '测试中');
+  r = await testFetch(RAW_URL, {}, 15000);
+  if (r.ok) badge('r2', 'ok', '✅ 通过 (' + r.status + ')');
+  else badge('r2', 'fail', '❌ 失败 ' + (r.status || r.error || ''));
+
+  // 写请求：用不带正文的 OPTIONS 探测连通性
+  badge('w1', 'wait', '测试中');
+  r = await testFetch(GH_API, { method: 'OPTIONS', headers: { 'Accept': '*/*' } }, 15000);
+  if (r.status !== 0) {
+    // 能拿到响应（无论状态码），说明网络能通到 GitHub API
+    badge('w1', 'ok', '✅ 可连接 (' + r.status + ')');
+    detail('w1d', '能收到服务器响应，说明你的网络可以访问 GitHub 写入接口');
+  } else {
+    badge('w1', 'fail', '❌ 无法连接');
+    detail('w1d', '网络错误：' + (r.error||'') + '。说明写请求被网络阻断');
+  }
+
+  // 写请求：认证测试（GET /user，验证 token 有效）
+  if (token) {
+    badge('w2', 'wait', '测试中');
+    const url = 'https://api.github.com/user';
+    r = await testFetch(url, { headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github+json' } }, 15000);
+    if (r.ok) {
+      badge('w2', 'ok', '✅ Token 有效');
+      try { const j = JSON.parse(r.text); detail('w2d', '登录账号：' + j.login); } catch(e){}
+    } else {
+      badge('w2', 'fail', '❌ Token 无效/无法访问 (' + (r.status || r.error || '') + ')');
+      detail('w2d', r.status ? ('HTTP ' + r.status + '：' + r.text.slice(0,150)) : ('网络错误：' + (r.error||'')));
+    }
+  } else {
+    badge('w2', 'wait', '未找到 Token');
+    detail('w2d', '当前浏览器未保存 Token（在同步设置页设置后才能测）。但连通性看上面的「写入接口」即可。');
+  }
+
+  // 结论
+  const w1ok = document.getElementById('w1').classList.contains('ok');
+  const w2ok = document.getElementById('w2').classList.contains('ok');
+  let con = '<h2>诊断结论</h2><div class="card">';
+  if (w1ok) {
+    con += '<p>✅ 你的网络<b>可以访问 GitHub 写入接口</b>。之前推送失败可能是 Token 无效或短时网络波动，请到「同步设置」重新粘贴 Token 再试。</p>';
+  } else {
+    con += '<p>❌ 你的网络<b>无法访问 GitHub 写入接口</b>（被墙或 DNS 问题）。这就是数据推不上去的原因。需要：</p><ul>';
+    con += '<li>开启代理/VPN（全局模式）后再点「同步设置 → 手动同步」</li>';
+    con += '<li>或改用「导出/导入数据文件」兜底</li>';
+    con += '<li>或把存储换成大陆可直连的国内云服务</li></ul>';
+  }
+  con += '</div>';
+  document.getElementById('conclusion').innerHTML = con;
+
+  btn.disabled = false; btn.textContent = '重新测试';
+}
+</script>
+</body>
+</html>
