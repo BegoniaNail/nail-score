@@ -18,8 +18,9 @@
 <meta name="apple-mobile-web-app-title" content="美甲计分统计">
 <meta name="theme-color" content="#783c48">
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root {
     --bg: #f8f3f3;
@@ -464,6 +465,18 @@
           <label>备注（可选）</label>
           <input type="text" id="rec-note" placeholder="可选">
         </div>
+      </div>
+
+      <div class="form-group" style="margin-top:4px;">
+        <label>款式图片（可上传当日作品多张）</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <label class="btn btn-sm btn-edit" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+            <span>📷</span><span>选择图片</span>
+            <input type="file" id="rec-photos-input" accept="image/*" multiple style="display:none;" onchange="onRecordPhotosSelected(event)">
+          </label>
+          <span style="font-size:12px;color:var(--text-light);">支持多张，自动压缩。可删除已选图片。</span>
+        </div>
+        <div id="rec-photos-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>
       </div>
 
       <div style="margin-top:12px;">
@@ -1824,6 +1837,79 @@ function delDesigner(id) {
 
 // ===== 计分录入（支持多款式批量）=====
 let styleRows = []; // 当前录入区已添加的款式行
+let pendingRecordPhotos = []; // 当前录入区待保存的图片 [{dataUrl, name}]
+
+// 压缩图片到最长边 1200px，JPEG 80%
+function compressImage(file, maxSize = 1200, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+          else { w = Math.round(w * maxSize / h); h = maxSize; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve({ dataUrl, name: file.name });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onRecordPhotosSelected(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  if (pendingRecordPhotos.length + files.length > 12) {
+    return toast('单次录入最多上传 12 张图片');
+  }
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) {
+      toast(`已跳过非图片文件：${f.name}`);
+      continue;
+    }
+    try {
+      const photo = await compressImage(f);
+      // 单张超过 800KB 警告
+      if (photo.dataUrl.length > 800 * 1024 * 1.37) {
+        toast(`图片 ${f.name} 较大（${Math.round(photo.dataUrl.length/1024)}KB）`);
+      }
+      pendingRecordPhotos.push(photo);
+    } catch (e) {
+      console.error('图片处理失败', e);
+    }
+  }
+  // 清空 input 以便重复选同一张
+  event.target.value = '';
+  renderRecordPhotoPreview();
+}
+
+function removeRecordPhoto(idx) {
+  pendingRecordPhotos.splice(idx, 1);
+  renderRecordPhotoPreview();
+}
+
+function renderRecordPhotoPreview() {
+  const el = document.getElementById('rec-photos-preview');
+  if (!el) return;
+  if (!pendingRecordPhotos.length) { el.innerHTML = ''; return; }
+  el.innerHTML = pendingRecordPhotos.map((p, i) => `
+    <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+      <img src="${p.dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+      <button type="button" onclick="removeRecordPhoto(${i})"
+        style="position:absolute;top:2px;right:2px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;line-height:1;cursor:pointer;padding:0;">×</button>
+    </div>
+  `).join('');
+}
 
 function addStyleRow(styleId = '', count = 1) {
   if (!DB.styles.length) return toast('请先在"款式管理"中添加款式');
@@ -1930,6 +2016,7 @@ function addRecord() {
   if (!date) { date = todayStr(); document.getElementById('rec-date').value = date; }
   if (!styleRows.length) return toast('请至少添加一个款式行');
 
+  const photos = pendingRecordPhotos.slice(); // 共享到本次所有款式记录
   let added = 0, totalScore = 0;
   const ts = Date.now();
   styleRows.forEach(r => {
@@ -1939,7 +2026,8 @@ function addRecord() {
     if (!style) return;
     const score = +(style.score * count); // 不强制两位小数，保留原始精度
     DB.records.push({
-      id: uid(), artistId, styleId: r.styleId, count, score, date, note, ts: ts + added
+      id: uid(), artistId, styleId: r.styleId, count, score, date, note, ts: ts + added,
+      photos: photos.length ? photos.slice() : undefined
     });
     added++;
     totalScore += score;
@@ -1947,11 +2035,13 @@ function addRecord() {
   if (added === 0) return toast('没有有效的款式行');
 
   save();
-  // 清空款式行，保留美甲师和日期方便继续录下一位
+  // 清空款式行和图片，保留美甲师和日期方便继续录下一位
   styleRows = [];
+  pendingRecordPhotos = [];
   document.getElementById('rec-note').value = '';
   renderStyleRows();
-  toast(`录入成功：${added} 条记录，共 ${fmt(totalScore)} 分`);
+  renderRecordPhotoPreview();
+  toast(`录入成功：${added} 条记录，共 ${fmt(totalScore)} 分${photos.length ? '，含 ' + photos.length + ' 张图片' : ''}`);
   renderAll();
 }
 function delRecord(id) {
@@ -2465,6 +2555,8 @@ function getMonthlyStatData(artistId, month) {
 
   let totalCount = 0, totalScore = 0;
   const stylesMap = {};
+  // 按日期分组的图片（[{date, items: [{styleName, dataUrl}]}]）
+  const photosByDate = {};
   monthRecs.forEach(r => {
     totalCount += r.count;
     totalScore += r.score;
@@ -2473,6 +2565,12 @@ function getMonthlyStatData(artistId, month) {
     if (!stylesMap[r.styleId]) stylesMap[r.styleId] = { name: sName, score: sScore, count: 0, subScore: 0 };
     stylesMap[r.styleId].count += r.count;
     stylesMap[r.styleId].subScore += r.score;
+    if (r.photos && r.photos.length) {
+      if (!photosByDate[r.date]) photosByDate[r.date] = [];
+      r.photos.forEach(p => {
+        if (p && p.dataUrl) photosByDate[r.date].push({ styleName: sName, dataUrl: p.dataUrl });
+      });
+    }
   });
 
   // 打版数据
@@ -2491,12 +2589,68 @@ function getMonthlyStatData(artistId, month) {
   return {
     artist, totalCount, totalScore,
     styleList: Object.values(stylesMap),
-    monthStyles, designCount, designScoreRaw, grandTotalScoreRaw
+    monthStyles, designCount, designScoreRaw, grandTotalScoreRaw,
+    photosByDate
   };
 }
 
-// 导出当前美甲师 Excel
-function exportMonthlyExcel() {
+// dataURL 转 ArrayBuffer（用于 ExcelJS addImage）
+function dataUrlToArrayBuffer(dataUrl) {
+  const base64 = dataUrl.split(',')[1];
+  const bin = atob(base64);
+  const len = bin.length;
+  const buf = new Uint8Array(len);
+  for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+function dataUrlExt(dataUrl) {
+  const m = (dataUrl.match(/data:image\/(\w+);base64/) || [])[1];
+  if (m === 'jpeg' || m === 'jpg') return 'jpeg';
+  return (m || 'png');
+}
+// 把一组图片（带款式名）写入 ws，从指定 row 开始，每行 3 张
+function embedPhotosIntoSheet(ws, photos, startRow) {
+  if (!photos || !photos.length) return startRow;
+  let row = startRow;
+  // 按样式名分组
+  const groups = {};
+  photos.forEach(p => {
+    if (!groups[p.styleName]) groups[p.styleName] = [];
+    groups[p.styleName].push(p.dataUrl);
+  });
+  Object.keys(groups).forEach(styleName => {
+    const urls = groups[styleName];
+    ws.getCell(row, 1).value = `${styleName}（${urls.length} 张）`;
+    ws.getRow(row).font = { bold: true, color: { argb: 'FF783C48' } };
+    row++;
+    // 每行 3 张
+    let col = 1;
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      try {
+        const buf = dataUrlToArrayBuffer(url);
+        const ext = dataUrlExt(url);
+        const imageId = ws.workbook.addImage({ buffer: buf, extension: ext });
+        ws.addImage(imageId, {
+          tl: { col: col - 1, row: row - 1 },
+          br: { col: col, row: row },
+          editAs: 'oneCell'
+        });
+        ws.getRow(row).height = 90;
+        col++;
+        if (col > 4) { col = 1; row++; }
+      } catch (e) {
+        console.error('嵌入图片失败', e);
+      }
+    }
+    if (col !== 1) row++;
+    row++;
+  });
+  return row;
+}
+
+// 导出当前美甲师 Excel（ExcelJS，支持图片嵌入）
+async function exportMonthlyExcel() {
   const artistId = document.getElementById('monthly-artist').value;
   if (!artistId) return toast('请先选择美甲师');
   const month = document.getElementById('monthly-month').value || currentMonthStr();
@@ -2505,98 +2659,197 @@ function exportMonthlyExcel() {
   const d = getMonthlyStatData(artistId, month);
   if (!d) return toast('美甲师不存在');
 
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '美甲师计分系统';
+  wb.created = new Date();
 
   // 汇总 sheet
-  const summaryData = [
-    ['月度统计表'],
-    [],
-    ['姓名', '统计月份', '当月总副数', '当月做款积分', '当月打版数量', '打版合计积分', '当月总积分'],
-    [d.artist.name, monthName, fmt(d.totalCount), fmt(d.totalScore), d.designCount, fmt(d.designScoreRaw), fmt(d.grandTotalScoreRaw)]
+  const wsSummary = wb.addWorksheet('汇总');
+  wsSummary.columns = [
+    { header: '姓名', key: 'name', width: 12 },
+    { header: '统计月份', key: 'month', width: 14 },
+    { header: '当月总副数', key: 'totalCount', width: 14 },
+    { header: '当月做款积分', key: 'totalScore', width: 14 },
+    { header: '当月打版数量', key: 'designCount', width: 14 },
+    { header: '打版合计积分', key: 'designScore', width: 14 },
+    { header: '当月总积分', key: 'grand', width: 14 }
   ];
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  wsSummary['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
+  wsSummary.addRow({
+    name: d.artist.name, month: monthName,
+    totalCount: fmt(d.totalCount), totalScore: fmt(d.totalScore),
+    designCount: d.designCount, designScore: fmt(d.designScoreRaw),
+    grand: fmt(d.grandTotalScoreRaw)
+  });
+  wsSummary.getRow(1).font = { bold: true };
+  wsSummary.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+  wsSummary.getRow(2).font = { bold: true, color: { argb: 'FF783C48' } };
 
-  // 计分款式明细 sheet
-  const scoreRows = [['款式名称', '单副积分', '副数', '小计积分']];
+  // 做款计分明细
+  const wsScore = wb.addWorksheet('做款计分明细');
+  wsScore.columns = [
+    { header: '款式名称', key: 'name', width: 30 },
+    { header: '单副积分', key: 'score', width: 12 },
+    { header: '副数', key: 'count', width: 10 },
+    { header: '小计积分', key: 'sub', width: 12 }
+  ];
   d.styleList.forEach(s => {
-    scoreRows.push([s.name, fmt(s.score || 0), fmt(s.count), fmt(s.subScore)]);
+    wsScore.addRow({ name: s.name, score: fmt(s.score || 0), count: fmt(s.count), sub: fmt(s.subScore) });
   });
-  scoreRows.push(['合计', '-', fmt(d.totalCount) + ' 副', fmt(d.totalScore)]);
-  const wsScore = XLSX.utils.aoa_to_sheet(scoreRows);
-  wsScore['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 10 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, wsScore, '做款计分明细');
+  wsScore.addRow({ name: '合计', count: fmt(d.totalCount) + ' 副', sub: fmt(d.totalScore) });
+  wsScore.getRow(1).font = { bold: true };
+  wsScore.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+  wsScore.lastRow.font = { bold: true };
 
-  // 打版款式明细 sheet
-  const designRows = [['款式名称', '打版日期', '积分']];
+  // 打版款式明细
+  const wsDesign = wb.addWorksheet('打版款式明细');
+  wsDesign.columns = [
+    { header: '款式名称', key: 'name', width: 30 },
+    { header: '打版日期', key: 'date', width: 15 },
+    { header: '积分', key: 'score', width: 10 }
+  ];
   d.monthStyles.forEach(s => {
-    designRows.push([s.name, s.createDate || '-', fmt(s.score || 0)]);
+    wsDesign.addRow({ name: s.name, date: s.createDate || '-', score: fmt(s.score || 0) });
   });
-  designRows.push(['合计', d.designCount + ' 款', fmt(d.designScoreRaw) + ' 分']);
-  const wsDesign = XLSX.utils.aoa_to_sheet(designRows);
-  wsDesign['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }];
-  XLSX.utils.book_append_sheet(wb, wsDesign, '打版款式明细');
+  wsDesign.addRow({ name: `合计 ${d.designCount} 款`, score: fmt(d.designScoreRaw) + ' 分' });
+  wsDesign.getRow(1).font = { bold: true };
+  wsDesign.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+  wsDesign.lastRow.font = { bold: true };
 
-  const filename = `月度统计_${d.artist.name}_${month}.xlsx`;
-  XLSX.writeFile(wb, filename);
-  toast(`已导出 ${d.artist.name} 的 Excel`);
+  // 当日款式图片 sheet（按日期分组展示）
+  const dates = Object.keys(d.photosByDate || {}).sort();
+  if (dates.length) {
+    const wsPhotos = wb.addWorksheet('款式图片');
+    wsPhotos.columns = [{ header: '日期 / 款式', key: 'name', width: 28 }];
+    wsPhotos.getRow(1).font = { bold: true };
+    wsPhotos.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    let curRow = 2;
+    dates.forEach(date => {
+      const [yy, mm, dd] = date.split('-').map(n => parseInt(n));
+      const cell = wsPhotos.getCell(curRow, 1);
+      cell.value = `📅 ${yy}年${mm}月${dd}日（${d.photosByDate[date].length} 张）`;
+      cell.font = { bold: true, size: 13, color: { argb: 'FF783C48' } };
+      wsPhotos.getRow(curRow).height = 22;
+      curRow++;
+      curRow = embedPhotosIntoSheet(wsPhotos, d.photosByDate[date], curRow);
+    });
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `月度统计_${d.artist.name}_${month}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`已导出 ${d.artist.name} 的 Excel（含图片）`);
 }
 
-// 导出全部美甲师 Excel
-function exportAllMonthlyExcel() {
+// 导出全部美甲师 Excel（ExcelJS，支持图片嵌入）
+async function exportAllMonthlyExcel() {
   if (!DB.artists.length) return toast('暂无美甲师');
   const month = document.getElementById('monthly-month').value || currentMonthStr();
   const [y, m] = month.split('-');
   const monthName = `${y}年${parseInt(m)}月`;
 
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '美甲师计分系统';
+  wb.created = new Date();
 
   // 汇总总表
-  const summaryRows = [['月度统计汇总表', '', '', '', '', '', '']];
-  summaryRows.push(['统计月份', monthName, '', '', '', '', '']);
-  summaryRows.push([]);
-  summaryRows.push(['序号', '姓名', '当月总副数', '当月做款积分', '当月打版数量', '打版合计积分', '当月总积分']);
+  const wsSummary = wb.addWorksheet('汇总');
+  wsSummary.columns = [
+    { header: '序号', key: 'idx', width: 8 },
+    { header: '姓名', key: 'name', width: 12 },
+    { header: '当月总副数', key: 'totalCount', width: 14 },
+    { header: '当月做款积分', key: 'totalScore', width: 14 },
+    { header: '当月打版数量', key: 'designCount', width: 14 },
+    { header: '打版合计积分', key: 'designScore', width: 14 },
+    { header: '当月总积分', key: 'grand', width: 14 }
+  ];
   DB.artists.forEach((a, i) => {
     const d = getMonthlyStatData(a.id, month);
     if (!d) return;
-    summaryRows.push([i + 1, a.name, fmt(d.totalCount), fmt(d.totalScore), d.designCount, fmt(d.designScoreRaw), fmt(d.grandTotalScoreRaw)]);
+    wsSummary.addRow({
+      idx: i + 1, name: a.name,
+      totalCount: fmt(d.totalCount), totalScore: fmt(d.totalScore),
+      designCount: d.designCount, designScore: fmt(d.designScoreRaw),
+      grand: fmt(d.grandTotalScoreRaw)
+    });
   });
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-  wsSummary['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
+  wsSummary.getRow(1).font = { bold: true };
+  wsSummary.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
 
-  // 每人一个 sheet（计分+打版明细）
+  // 每人一个 sheet
   DB.artists.forEach(a => {
     const d = getMonthlyStatData(a.id, month);
     if (!d) return;
     let sheetName = a.name.substring(0, 28);
     let finalName = sheetName;
     let suffix = 2;
-    while (wb.SheetNames.includes(finalName)) { finalName = sheetName + '_' + suffix; suffix++; }
+    while (wb.getWorksheet(finalName)) { finalName = sheetName + '_' + suffix; suffix++; }
 
-    const rows = [['=== 做款计分明细 ===']];
-    rows.push(['款式名称', '单副积分', '副数', '小计积分']);
+    const ws = wb.addWorksheet(finalName);
+    ws.columns = [
+      { header: '款式名称', key: 'name', width: 30 },
+      { header: '单副积分', key: 'score', width: 12 },
+      { header: '副数', key: 'count', width: 10 },
+      { header: '小计积分', key: 'sub', width: 12 }
+    ];
+    // 做款计分明细
+    const titleRow = ws.getRow(1);
+    titleRow.getCell(1).value = '=== 做款计分明细 ===';
+    titleRow.font = { bold: true, color: { argb: 'FF783C48' }, size: 12 };
+    titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    ws.addRow(); // 空行
+    const headerRow = ws.addRow(['款式名称', '单副积分', '副数', '小计积分']);
+    headerRow.font = { bold: true };
     d.styleList.forEach(s => {
-      rows.push([s.name, fmt(s.score || 0), fmt(s.count), fmt(s.subScore)]);
+      ws.addRow([s.name, fmt(s.score || 0), fmt(s.count), fmt(s.subScore)]);
     });
-    rows.push(['合计', '-', fmt(d.totalCount) + ' 副', fmt(d.totalScore)]);
-    rows.push([]);
-    rows.push(['=== 打版款式明细 ===']);
-    rows.push(['款式名称', '打版日期', '积分']);
+    const totalRow1 = ws.addRow(['合计', '-', fmt(d.totalCount) + ' 副', fmt(d.totalScore)]);
+    totalRow1.font = { bold: true };
+    ws.addRow();
+    // 打版款式明细
+    const title2 = ws.addRow(['=== 打版款式明细 ===']);
+    title2.font = { bold: true, color: { argb: 'FF783C48' }, size: 12 };
+    title2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    ws.addRow();
+    ws.addRow(['款式名称', '打版日期', '积分']).font = { bold: true };
     d.monthStyles.forEach(s => {
-      rows.push([s.name, s.createDate || '-', fmt(s.score || 0)]);
+      ws.addRow([s.name, s.createDate || '-', fmt(s.score || 0)]);
     });
-    rows.push(['合计', d.designCount + ' 款', fmt(d.designScoreRaw) + ' 分']);
+    const totalRow2 = ws.addRow([`合计 ${d.designCount} 款`, '', fmt(d.designScoreRaw) + ' 分']);
+    totalRow2.font = { bold: true };
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, ws, finalName);
+    // 款式图片
+    const dates = Object.keys(d.photosByDate || {}).sort();
+    if (dates.length) {
+      ws.addRow();
+      const title3 = ws.addRow(['=== 款式图片 ===']);
+      title3.font = { bold: true, color: { argb: 'FF783C48' }, size: 12 };
+      title3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+      ws.addRow();
+      let curRow = ws.lastRow.number + 1;
+      dates.forEach(date => {
+        const [yy, mm, dd] = date.split('-').map(n => parseInt(n));
+        const cell = ws.getCell(curRow, 1);
+        cell.value = `📅 ${yy}年${mm}月${dd}日（${d.photosByDate[date].length} 张）`;
+        cell.font = { bold: true, color: { argb: 'FF783C48' } };
+        ws.getRow(curRow).height = 22;
+        curRow++;
+        curRow = embedPhotosIntoSheet(ws, d.photosByDate[date], curRow);
+      });
+    }
   });
 
-  const filename = `月度统计_全部_${month}.xlsx`;
-  XLSX.writeFile(wb, filename);
-  toast('已导出全部美甲师 Excel');
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `月度统计_全部_${month}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已导出全部美甲师 Excel（含图片）');
 }
 
 // ===== 打版统计 =====
@@ -2877,10 +3130,15 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
   dayRecs.forEach(r => {
     if (!styleSummary[r.styleId]) {
       const s = sm[r.styleId];
-      styleSummary[r.styleId] = { name: s ? s.name : '已删除款式', count: 0, score: 0 };
+      styleSummary[r.styleId] = { name: s ? s.name : '已删除款式', count: 0, score: 0, photos: [] };
     }
     styleSummary[r.styleId].count += r.count;
     styleSummary[r.styleId].score += r.score; // 原始累加，不截断
+    if (r.photos && r.photos.length) {
+      r.photos.forEach(p => {
+        if (p && p.dataUrl) styleSummary[r.styleId].photos.push(p.dataUrl);
+      });
+    }
   });
 
   // 头像
@@ -2925,6 +3183,27 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
     });
     html += `<tr class="total-row"><td>合计</td><td>${fmt(dayCount)}</td><td>${fmt(dayScoreRaw)}</td></tr>`;
     html += `</tbody></table></div>`;
+
+    // 当日款式图片（每个款式各自的图片）
+    const stylePhotos = styleList.filter(s => s.photos && s.photos.length);
+    if (stylePhotos.length) {
+      html += `<div style="margin-top:16px;">`;
+      stylePhotos.forEach(s => {
+        html += `<div style="margin-bottom:14px;">
+          <div style="font-size:13px;font-weight:600;color:var(--primary-dark);margin-bottom:6px;">${s.name} · ${s.photos.length} 张</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">`;
+        s.photos.slice(0, 12).forEach(url => {
+          html += `<a href="${url}" target="_blank" rel="noopener" style="display:block;width:90px;height:90px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">
+            <img src="${url}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+          </a>`;
+        });
+        if (s.photos.length > 12) {
+          html += `<div style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:6px;font-size:12px;color:var(--text-light);">+${s.photos.length - 12}</div>`;
+        }
+        html += `</div></div>`;
+      });
+      html += `</div>`;
+    }
   }
   html += `</div>`;
 
