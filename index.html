@@ -1427,15 +1427,27 @@ async function testCosConnection() {
   try {
     await loadCosSdk();
     const cos = createCos();
-    // 用 getBucket 列一下对象，验证密钥和桶是否有效
+    // 用 headBucket 探测桶权限（轻量调用，不列举对象避免大桶列表返回慢）
     return await new Promise((resolve) => {
-      cos.getBucket({ Bucket: c.bucket, Region: c.region }, function(err, data) {
+      cos.headBucket({ Bucket: c.bucket, Region: c.region }, function(err, data) {
         if (err) {
-          let msg = (err.error && err.error.Message) || err.message || '连接失败';
-          resolve({ ok: false, msg: '连接失败：' + msg });
+          // 提取 SDK 真实错误原因（多级 fallback）
+          let detail = '';
+          if (err.error && err.error.Message) detail = err.error.Message;
+          else if (err.message) detail = err.message;
+          else if (err.statusCode) detail = 'HTTP ' + err.statusCode;
+          else detail = JSON.stringify(err).slice(0, 200);
+          resolve({ ok: false, msg: '连接失败：' + detail });
         } else {
-          const count = data && data.Contents ? data.Contents.length : 0;
-          resolve({ ok: true, msg: '✅ COS 连接成功，桶内 ' + count + ' 个对象' });
+          // headBucket 成功，进一步尝试列一个对象确认读写权限
+          cos.getBucket({ Bucket: c.bucket, Region: c.region, MaxKeys: 1 }, function(err2, data2) {
+            if (err2) {
+              resolve({ ok: false, msg: '桶可访问但列举失败：' + ((err2.error && err2.error.Message) || err2.message || '未知') });
+            } else {
+              const count = data2 && data2.Contents ? data2.Contents.length : 0;
+              resolve({ ok: true, msg: '✅ COS 连接成功，桶可访问，可列出对象' });
+            }
+          });
         }
       });
     });
