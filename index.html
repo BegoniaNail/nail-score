@@ -1134,22 +1134,13 @@ function loadCosSdk() {
   });
   return cosSdkPromise;
 }
-// 创建 COS 实例（前端持有密钥签名，个人小应用方案，风险已用最小权限子密钥降低）
+// 创建 COS 实例（前端持有永久密钥签名——个人私用方案，风险已用最小权限子密钥降低）
+// 腾讯云官方推荐：永久密钥用法是直接传 SecretId/SecretKey，不要用 getAuthorization 回调
 function createCos() {
   const c = getCosConfig();
   return new COS({
-    getAuthorization: function(options, callback) {
-      // 密钥写死前端（个人使用），直接返回固定签名
-      const now = Math.floor(Date.now() / 1000);
-      callback({
-        TmpSecretId: c.secretId,
-        TmpSecretKey: c.secretKey,
-        XCosSecurityToken: '', // 旧版兼容字段
-        SecurityToken: '', // 新版 SDK 必须字段（固定密钥下置空字符串即可）
-        StartTime: now,
-        ExpiredTime: now + 3600 // 有效期 1 小时
-      });
-    }
+    SecretId: c.secretId,
+    SecretKey: c.secretKey
   });
 }
 
