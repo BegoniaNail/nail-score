@@ -1157,7 +1157,7 @@ async function pullGitHub() {
 }
 
 // 推送：需要 Token
-async function pushGitHub() {
+async function pushGitHub(skipConflictRecovery = false) {
   const token = getToken();
   if (!token) {
     // 没有 Token，提示输入
@@ -1174,9 +1174,9 @@ async function pushGitHub() {
       branch: GH_BRANCH
     };
     if (ghDataSha) body.sha = ghDataSha; // 更新已有文件需要 sha
-    // 15 秒超时
+    // 30 秒超时（图片数据较大）
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
     const res = await fetch(GH_API, {
       method: 'PUT',
       headers: {
@@ -1197,6 +1197,14 @@ async function pushGitHub() {
       promptToken(() => pushGitHub());
       return false;
     }
+    if ((res.status === 409 || res.status === 422) && !skipConflictRecovery) {
+      // sha 冲突：另一台设备已推送过新版本
+      // 自动恢复：先拉取云端最新数据（更新 sha + 合并进本地，本地数据不会丢），再重试推送
+      console.log('sha 冲突(' + res.status + ')，拉取最新数据后自动重试...');
+      SYNCING = false;
+      await pullCloud();
+      return await pushGitHub(true);
+    }
     if (!res.ok) throw new Error('GitHub push failed: ' + res.status);
     const info = await res.json();
     ghDataSha = info.content.sha; // 更新 sha
@@ -1209,6 +1217,7 @@ async function pushGitHub() {
     console.error('GitHub push error', e);
     SYNCING = false;
     setSync('offline');
+    toast('⚠️ 云端同步失败，数据已保存在本机。恢复网络后会自动重试');
     // GitHub 失败时尝试 jsonblob 备用
     console.log('尝试 jsonblob 备用推送...');
     return await pushJsonblob();
@@ -1569,9 +1578,13 @@ function saveTokenFromConfig() {
 async function manualSync() {
   toast('正在同步...');
   await pullCloud();
-  await pushCloud();
+  const ok = await pushCloud();
   renderSyncConfig();
-  toast('同步完成');
+  if (ok) {
+    toast('✅ 同步完成，云端已是最新');
+  } else {
+    toast('⚠️ 推送失败，数据已保存在本机，请检查网络后重试');
+  }
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(DB, null, 2)], { type: 'application/json' });
@@ -3578,6 +3591,22 @@ setInterval(async () => {
   // 再拉取云端（mergeCloudData 会保护本地未推送的修改）
   await pullCloud();
 }, 120000);
+
+// 页面从后台切回前台时立即同步一次（手机切换 App 场景）
+let lastForegroundSync = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    const now = Date.now();
+    // 距上次前台同步超过 15 秒才触发，避免频繁切换
+    if (now - lastForegroundSync > 15000) {
+      lastForegroundSync = now;
+      (async () => {
+        if (lastSaveTime > lastPushTime) await pushCloud();
+        await pullCloud();
+      })();
+    }
+  }
+});
 </script>
 </body>
 </html>
