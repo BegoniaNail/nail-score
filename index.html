@@ -1144,7 +1144,8 @@ function createCos() {
       callback({
         TmpSecretId: c.secretId,
         TmpSecretKey: c.secretKey,
-        XCosSecurityToken: '', // 固定密钥不需要临时 token
+        XCosSecurityToken: '', // 旧版兼容字段
+        SecurityToken: '', // 新版 SDK 必须字段（固定密钥下置空字符串即可）
         StartTime: now,
         ExpiredTime: now + 3600 // 有效期 1 小时
       });
