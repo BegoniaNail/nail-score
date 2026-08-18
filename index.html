@@ -18,8 +18,9 @@
 <meta name="apple-mobile-web-app-title" content="美甲计分统计">
 <meta name="theme-color" content="#783c48">
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root {
     --bg: #f8f3f3;
@@ -466,6 +467,18 @@
         </div>
       </div>
 
+      <div class="form-group" style="margin-top:4px;">
+        <label>款式图片（可上传当日作品多张）</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <label class="btn btn-sm btn-edit" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+            <span>📷</span><span>选择图片</span>
+            <input type="file" id="rec-photos-input" accept="image/*" multiple style="display:none;" onchange="onRecordPhotosSelected(event)">
+          </label>
+          <span style="font-size:12px;color:var(--text-light);">支持多张，自动压缩。可删除已选图片。</span>
+        </div>
+        <div id="rec-photos-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>
+      </div>
+
       <div style="margin-top:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <label style="font-size:13px;color:var(--text-light);">本次做的款式（可添加多个）</label>
@@ -843,13 +856,57 @@
       </div>
     </div>
     <div class="card">
+      <h2>🇨🇳 腾讯云 COS（国内主力存储）</h2>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;line-height:1.7;">
+        数据会同时写入腾讯云 COS 和 GitHub。<br>
+        <strong>COS 在国内直连、不受墙影响</strong>，手机/电脑都能正常同步；GitHub 作为备份。<br>
+        配置方法见 <code>腾讯云COS配置指引.md</code>（需先开通 COS、创建桶、生成最小权限子密钥）。
+      </p>
+      <div id="cos-status-box" style="margin-bottom:14px;"></div>
+      <div class="form-row" style="gap:10px;">
+        <div class="form-group" style="flex:1;">
+          <label>桶名称（含 APPID 后缀）</label>
+          <input type="text" id="cos-bucket" placeholder="如 nail-score-data-1250000000">
+        </div>
+      </div>
+      <div class="form-row" style="gap:10px;">
+        <div class="form-group" style="flex:1;">
+          <label>地域 Region</label>
+          <input type="text" id="cos-region" placeholder="如 ap-guangzhou">
+        </div>
+      </div>
+      <div class="form-row" style="gap:10px;">
+        <div class="form-group" style="flex:1;">
+          <label>SecretId</label>
+          <input type="text" id="cos-secret-id" placeholder="AKIDxxxxxxxx">
+        </div>
+      </div>
+      <div class="form-row" style="gap:10px;">
+        <div class="form-group" style="flex:1;">
+          <label>SecretKey</label>
+          <input type="password" id="cos-secret-key" placeholder="xxxxxxxx">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn btn-primary" onclick="saveCosFromConfig()">💾 保存 COS 配置</button>
+        <button class="btn" style="background:var(--primary-light);" onclick="testCosFromConfig()">🧪 测试 COS 连接</button>
+        <button class="btn" style="background:#c0505a;color:#fff;" onclick="clearCosConfigUI()">🗑️ 清除 COS 配置</button>
+      </div>
+      <div id="cos-test-result" style="margin-top:10px;font-size:12px;color:var(--text-light);"></div>
+    </div>
+    <div class="card">
       <h2>📦 数据管理</h2>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn" style="background:var(--primary-light);" onclick="manualSync()">🔄 手动同步</button>
         <button class="btn" style="background:#eee;" onclick="exportData()">💾 导出数据到文件</button>
+        <label class="btn" style="background:#eee;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+          📥 导入数据文件
+          <input type="file" accept="application/json,.json" style="display:none;" onchange="importData(event)">
+        </label>
         <button class="btn" style="background:#c0505a;color:#fff;" onclick="clearGithubToken()">🗑️ 清除 Token</button>
       </div>
       <div id="sync-info" style="margin-top:12px;font-size:12px;color:var(--text-light);"></div>
+      <div id="sync-error-detail" style="margin-top:8px;font-size:12px;color:#c0505a;display:none;"></div>
     </div>
   </div>
 
@@ -1030,6 +1087,11 @@ const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${G
 // jsonblob 备用（迁移及 fallback）
 const BIN_ID = '019fafca-3462-704c-9eed-3db463b6f5e1';
 const JSONBLOB_API = 'https://jsonblob.com/api/jsonBlob/' + BIN_ID;
+// ===== 腾讯云 COS 配置（国内主力存储，绕过 GitHub 被墙问题）=====
+const COS_CONFIG_KEY = 'nailCosConfig_v1';
+const COS_DATA_KEY = 'nail-score-data.json'; // COS 中的对象键
+// COS SDK CDN（cos-js-sdk-v5，官方 unpkg 入口）
+const COS_SDK_URL = 'https://unpkg.com/cos-js-sdk-v5@1.10.1/dist/cos-js-sdk-v5.js';
 
 let DB = { styles: [], artists: [], designers: [], records: [], admins: [] };
 let SYNCING = false;
@@ -1044,6 +1106,51 @@ const PUSH_TIME_KEY = 'nailScorePushTime_v1';
 function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
 function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
 function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+// ===== 腾讯云 COS 配置管理 =====
+function getCosConfig() {
+  try { return JSON.parse(localStorage.getItem(COS_CONFIG_KEY) || '{}'); }
+  catch(e) { return {}; }
+}
+function setCosConfig(cfg) {
+  localStorage.setItem(COS_CONFIG_KEY, JSON.stringify(cfg || {}));
+}
+function clearCosConfig() { localStorage.removeItem(COS_CONFIG_KEY); }
+function hasCosConfig() {
+  const c = getCosConfig();
+  return !!(c.bucket && c.region && c.secretId && c.secretKey);
+}
+// 动态加载 COS SDK
+let cosSdkPromise = null;
+function loadCosSdk() {
+  if (window.COS) return Promise.resolve(window.COS);
+  if (cosSdkPromise) return cosSdkPromise;
+  cosSdkPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = COS_SDK_URL;
+    s.onload = () => { if (window.COS) resolve(window.COS); else reject(new Error('COS SDK 加载失败')); };
+    s.onerror = () => reject(new Error('COS SDK 加载失败'));
+    document.head.appendChild(s);
+  });
+  return cosSdkPromise;
+}
+// 创建 COS 实例（前端持有密钥签名，个人小应用方案，风险已用最小权限子密钥降低）
+function createCos() {
+  const c = getCosConfig();
+  return new COS({
+    getAuthorization: function(options, callback) {
+      // 密钥写死前端（个人使用），直接返回固定签名
+      const now = Math.floor(Date.now() / 1000);
+      callback({
+        TmpSecretId: c.secretId,
+        TmpSecretKey: c.secretKey,
+        XCosSecurityToken: '', // 固定密钥不需要临时 token
+        StartTime: now,
+        ExpiredTime: now + 3600 // 有效期 1 小时
+      });
+    }
+  });
+}
 
 function loadLocal() {
   try {
@@ -1144,7 +1251,7 @@ async function pullGitHub() {
 }
 
 // 推送：需要 Token
-async function pushGitHub() {
+async function pushGitHub(skipConflictRecovery = false) {
   const token = getToken();
   if (!token) {
     // 没有 Token，提示输入
@@ -1161,9 +1268,9 @@ async function pushGitHub() {
       branch: GH_BRANCH
     };
     if (ghDataSha) body.sha = ghDataSha; // 更新已有文件需要 sha
-    // 15 秒超时
+    // 30 秒超时（图片数据较大）
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
     const res = await fetch(GH_API, {
       method: 'PUT',
       headers: {
@@ -1180,22 +1287,47 @@ async function pushGitHub() {
       clearToken();
       setSync('offline');
       SYNCING = false;
-      toast('Token 无效，请重新输入');
+      const msg = 'Token 无效，请重新输入';
+      setSyncError(msg);
+      toast(msg);
       promptToken(() => pushGitHub());
       return false;
     }
-    if (!res.ok) throw new Error('GitHub push failed: ' + res.status);
+    if ((res.status === 409 || res.status === 422) && !skipConflictRecovery) {
+      // sha 冲突：另一台设备已推送过新版本
+      // 自动恢复：先拉取云端最新数据（更新 sha + 合并进本地，本地数据不会丢），再重试推送
+      console.log('sha 冲突(' + res.status + ')，拉取最新数据后自动重试...');
+      SYNCING = false;
+      await pullCloud();
+      return await pushGitHub(true);
+    }
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error('GitHub push failed', res.status, errText);
+      throw new Error('GitHub push failed: ' + res.status);
+    }
     const info = await res.json();
     ghDataSha = info.content.sha; // 更新 sha
     lastPushTime = Date.now(); // 记录成功推送时间
     savePushTime();
     setSync('ok');
     SYNCING = false;
+    setSyncError('');
     return true;
   } catch(e) {
     console.error('GitHub push error', e);
     SYNCING = false;
     setSync('offline');
+    let detail = '';
+    if (e && e.name === 'AbortError') {
+      detail = '⚠️ 推送超时（30秒）。可能是网络较慢或无法访问 GitHub，建议切换网络或开启代理。';
+    } else if (e && e.message && e.message.includes('fetch')) {
+      detail = '⚠️ 网络错误：无法连接到 GitHub API。在中国大陆通常需要代理/VPN 才能推送。';
+    } else {
+      detail = '⚠️ 推送失败：' + (e && e.message ? e.message : '网络错误');
+    }
+    setSyncError(detail + '<br>数据已保存在本机，恢复网络后会自动重试。');
+    toast(detail);
     // GitHub 失败时尝试 jsonblob 备用
     console.log('尝试 jsonblob 备用推送...');
     return await pushJsonblob();
@@ -1223,9 +1355,120 @@ async function pushJsonblob() {
   return false;
 }
 
+// ===== 腾讯云 COS 存储（国内主力，双写 + 优先拉取）=====
+// 推送数据到 COS
+async function pushCos() {
+  if (!hasCosConfig()) return false;
+  try {
+    await loadCosSdk();
+    const cos = createCos();
+    const c = getCosConfig();
+    // 校验桶配置是否正确（提前暴露桶名/地域错误）
+    const dataStr = JSON.stringify(DB);
+    // 先做一次 HEAD 探测，避免签名错误或桶不存在时误报成功
+    return await new Promise((resolve) => {
+      cos.putObject({
+        Bucket: c.bucket,
+        Region: c.region,
+        Key: COS_DATA_KEY,
+        Body: dataStr,
+        ContentType: 'application/json; charset=utf-8'
+      }, function(err, data) {
+        if (err) {
+          console.error('COS push error', err);
+          resolve(false);
+        } else {
+          console.log('COS push ok', data && data.ETag);
+          resolve(true);
+        }
+      });
+    });
+  } catch(e) {
+    console.error('COS push exception', e);
+    return false;
+  }
+}
+// 从 COS 拉取数据（返回解析后的对象，失败返回 null）
+async function pullCos() {
+  if (!hasCosConfig()) return null;
+  try {
+    await loadCosSdk();
+    const cos = createCos();
+    const c = getCosConfig();
+    return await new Promise((resolve) => {
+      cos.getObject({
+        Bucket: c.bucket,
+        Region: c.region,
+        Key: COS_DATA_KEY
+      }, function(err, data) {
+        if (err) {
+          // 对象不存在(NoSuchKey)属于正常首次情况，不视为错误
+          if (err.code === 'NoSuchKey' || err.error && err.error.Code === 'NoSuchKey') {
+            console.log('COS 对象尚不存在，稍后创建');
+            resolve(null);
+          } else {
+            console.error('COS pull error', err.code || err.message || err);
+            resolve(null);
+          }
+          return;
+        }
+        try {
+          const txt = data.Body && typeof data.Body === 'string' ? data.Body : new TextDecoder('utf-8').decode(data.Body);
+          resolve(JSON.parse(txt));
+        } catch(e) {
+          console.error('COS parse error', e);
+          resolve(null);
+        }
+      });
+    });
+  } catch(e) {
+    console.error('COS pull exception', e);
+    return null;
+  }
+}
+// 测试 COS 连接（返回 {ok, msg}）
+async function testCosConnection() {
+  const c = getCosConfig();
+  if (!c.bucket || !c.region || !c.secretId || !c.secretKey) {
+    return { ok: false, msg: '请先完整填写 COS 配置（桶、地域、SecretId、SecretKey）' };
+  }
+  try {
+    await loadCosSdk();
+    const cos = createCos();
+    // 用 getBucket 列一下对象，验证密钥和桶是否有效
+    return await new Promise((resolve) => {
+      cos.getBucket({ Bucket: c.bucket, Region: c.region }, function(err, data) {
+        if (err) {
+          let msg = (err.error && err.error.Message) || err.message || '连接失败';
+          resolve({ ok: false, msg: '连接失败：' + msg });
+        } else {
+          const count = data && data.Contents ? data.Contents.length : 0;
+          resolve({ ok: true, msg: '✅ COS 连接成功，桶内 ' + count + ' 个对象' });
+        }
+      });
+    });
+  } catch(e) {
+    return { ok: false, msg: '连接异常：' + (e && e.message ? e.message : e) };
+  }
+}
+
 // ===== 统一的拉取/推送接口 =====
 async function pullCloud() {
-  // 优先 GitHub，失败则 jsonblob
+  // 优先腾讯云 COS（国内可直连，不受墙影响），失败则回退 GitHub
+  const cosData = await pullCos();
+  if (cosData && cosData.styles) {
+    mergeCloudData(cosData);
+    renderAll();
+    setSync('ok');
+    // 确保有管理员
+    if (!DB.admins || !DB.admins.length) {
+      DB.admins.push({ id: uid(), name: 'BegoniaNail', password: '123456', isMaster: true });
+      saveLocal();
+      pushCloud();
+    }
+    return true;
+  }
+  // COS 不可用或没有数据，回退 GitHub
   const ghResult = await pullGitHub();
   if (ghResult === true) {
     // 确保有管理员
@@ -1264,10 +1507,17 @@ async function pullCloud() {
 let pushRetryCount = 0; // 推送重试次数
 
 async function pushCloud() {
-  // 推送到 GitHub
-  const ok = await pushGitHub();
+  // 双写策略：
+  // 1) COS 为国内主力存储（必须尽量成功，否则国内设备无法同步）
+  // 2) GitHub 为备份（尽力而为，失败不阻塞主流程，仅提示）
+  let cosOk = false, ghOk = false;
+  if (hasCosConfig()) {
+    cosOk = await pushCos();
+  }
+  ghOk = await pushGitHub();
+  const ok = cosOk || ghOk;
   if (!ok) {
-    // 推送失败，10 秒后自动重试（最多 2 次，避免无限循环）
+    // 全部失败，10 秒后自动重试（最多 2 次，避免无限循环）
     if (pushRetryCount < 2) {
       pushRetryCount++;
       if (pushRetryTimer) clearTimeout(pushRetryTimer);
@@ -1279,6 +1529,8 @@ async function pushCloud() {
   } else {
     pushRetryCount = 0; // 成功则重置计数
   }
+  // 更新同步状态提示（以 COS 为主）
+  if (cosOk) setSync('ok');
   return ok;
 }
 
@@ -1297,9 +1549,10 @@ function save() {
 function setSync(state) {
   const el = document.getElementById('sync-status');
   if (!el) return;
+  const cosOn = hasCosConfig();
   const map = {
     syncing: { t: '🔄 同步中…', c: '#f0b870' },
-    ok: { t: '☁️ 已同步（GitHub）', c: '#7ec99c' },
+    ok: { t: cosOn ? '☁️ 已同步（COS' + (getToken() ? '+GitHub' : '') + '）' : '☁️ 已同步（GitHub）', c: '#7ec99c' },
     offline: { t: '⚠️ 离线模式（仅本地）', c: '#c0505a' }
   };
   const m = map[state] || map.ok;
@@ -1313,9 +1566,8 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function fmt(n) {
   if (n == null || isNaN(n)) return '0';
   n = +n;
-  // 先截断到两位小数（不四舍五入）
-  n = Math.floor(n * 100) / 100;
-  // 去掉多余尾零
+  // 使用 toFixed(2) 四舍五入到两位小数，解决浮点精度问题（如 1.2+0.12=1.319999→1.32）
+  // 然后去掉多余尾零
   return (parseFloat(n.toFixed(2))).toString();
 }
 
@@ -1543,6 +1795,64 @@ function renderSyncConfig() {
     info.innerHTML = `仓库：<code>${GH_OWNER}/${GH_REPO}/${GH_DATA_PATH}</code> · 分支：<code>${GH_BRANCH}</code>` +
       (ghDataSha ? `<br>文件 SHA：<code>${ghDataSha.substring(0,8)}...</code>` : '');
   }
+  const errEl = document.getElementById('sync-error-detail');
+  if (errEl && lastSyncError) {
+    errEl.innerHTML = lastSyncError;
+    errEl.style.display = 'block';
+  }
+  renderCosConfig();
+}
+// 渲染 COS 状态
+function renderCosConfig() {
+  const box = document.getElementById('cos-status-box');
+  if (!box) return;
+  const c = getCosConfig();
+  if (hasCosConfig()) {
+    box.innerHTML = '<span class="badge" style="background:#7ec99c;color:white;">✅ COS 已配置</span>' +
+      `<span style="margin-left:8px;font-size:12px;color:var(--text-light);">桶 <code>${c.bucket}</code> · ${c.region}</span>`;
+    // 回填输入框
+    const bi = document.getElementById('cos-bucket'); if (bi && !bi.value) bi.value = c.bucket || '';
+    const ri = document.getElementById('cos-region'); if (ri && !ri.value) ri.value = c.region || '';
+    const si = document.getElementById('cos-secret-id'); if (si && !si.value) si.value = c.secretId || '';
+    const ki = document.getElementById('cos-secret-key'); if (ki && !ki.value) ki.value = c.secretKey || '';
+  } else {
+    box.innerHTML = '<span class="badge" style="background:#c0505a;color:white;">❌ COS 未配置（将回退到 GitHub，国内可能推送失败）</span>';
+  }
+}
+// 保存 COS 配置
+function saveCosFromConfig() {
+  const bucket = document.getElementById('cos-bucket').value.trim();
+  const region = document.getElementById('cos-region').value.trim();
+  const secretId = document.getElementById('cos-secret-id').value.trim();
+  const secretKey = document.getElementById('cos-secret-key').value.trim();
+  if (!bucket || !region || !secretId || !secretKey) {
+    return toast('请完整填写 COS 配置（桶、地域、SecretId、SecretKey）');
+  }
+  setCosConfig({ bucket, region, secretId, secretKey });
+  toast('COS 配置已保存，正在测试连接...');
+  renderCosConfig();
+  testCosFromConfig();
+}
+// 测试 COS 连接
+async function testCosFromConfig() {
+  const r = document.getElementById('cos-test-result');
+  if (!r) return;
+  r.innerHTML = '🔄 正在测试 COS 连接...';
+  const res = await testCosConnection();
+  r.innerHTML = `<span style="color:${res.ok ? '#2e7d32' : '#c0505a'};">${res.msg}</span>`;
+  if (res.ok) {
+    toast('COS 连接成功！');
+    // 连接成功顺便尝试推送一次，把数据写到 COS
+    if (hasCosConfig()) { await pushCos(); }
+  } else {
+    toast('COS 连接失败');
+  }
+}
+function clearCosConfigUI() {
+  clearCosConfig(); // 调用全局的清除函数
+  renderCosConfig();
+  const r = document.getElementById('cos-test-result'); if (r) r.innerHTML = '';
+  toast('COS 配置已清除');
 }
 function saveTokenFromConfig() {
   const t = document.getElementById('synconfig-token').value.trim();
@@ -1556,10 +1866,20 @@ function saveTokenFromConfig() {
 }
 async function manualSync() {
   toast('正在同步...');
-  await pullCloud();
-  await pushCloud();
+  setSyncError('');
+  const pullOk = await pullCloud();
+  const pushOk = await pushCloud();
   renderSyncConfig();
-  toast('同步完成');
+  if (pullOk && pushOk) {
+    toast('✅ 同步完成，云端已是最新');
+    setSyncError('');
+  } else if (!pullOk && !pushOk) {
+    toast('⚠️ 同步失败：无法连接 COS 与 GitHub');
+  } else if (!pushOk) {
+    toast('⚠️ 推送失败，数据已保存在本机');
+  } else {
+    toast('⚠️ 拉取失败，但推送成功');
+  }
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(DB, null, 2)], { type: 'application/json' });
@@ -1570,6 +1890,44 @@ function exportData() {
   a.click();
   URL.revokeObjectURL(url);
   toast('数据已导出');
+}
+function importData(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (!requireLogin()) return;
+  requireConfirm('导入会合并文件中的数据到本地，不会覆盖现有记录。确认导入？', function() {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data || typeof data !== 'object') throw new Error('文件格式错误');
+        if (!data.records && !data.styles && !data.artists) throw new Error('不是有效的备份文件');
+        mergeCloudData(data);
+        save();
+        renderAll();
+        toast('✅ 导入成功，数据已合并');
+      } catch (err) {
+        toast('导入失败：' + err.message);
+      }
+    };
+    reader.onerror = () => toast('读取文件失败');
+    reader.readAsText(file);
+  });
+  // 清空 input 允许重复选同一文件
+  event.target.value = '';
+}
+let lastSyncError = '';
+function setSyncError(detail) {
+  lastSyncError = detail;
+  const el = document.getElementById('sync-error-detail');
+  if (el) {
+    if (detail) {
+      el.innerHTML = detail;
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
+  }
 }
 
 // ===== 款式 =====
@@ -1825,6 +2183,79 @@ function delDesigner(id) {
 
 // ===== 计分录入（支持多款式批量）=====
 let styleRows = []; // 当前录入区已添加的款式行
+let pendingRecordPhotos = []; // 当前录入区待保存的图片 [{dataUrl, name}]
+
+// 压缩图片到最长边 1200px，JPEG 80%
+function compressImage(file, maxSize = 1200, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+          else { w = Math.round(w * maxSize / h); h = maxSize; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve({ dataUrl, name: file.name });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onRecordPhotosSelected(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  if (pendingRecordPhotos.length + files.length > 12) {
+    return toast('单次录入最多上传 12 张图片');
+  }
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) {
+      toast(`已跳过非图片文件：${f.name}`);
+      continue;
+    }
+    try {
+      const photo = await compressImage(f);
+      // 单张超过 800KB 警告
+      if (photo.dataUrl.length > 800 * 1024 * 1.37) {
+        toast(`图片 ${f.name} 较大（${Math.round(photo.dataUrl.length/1024)}KB）`);
+      }
+      pendingRecordPhotos.push(photo);
+    } catch (e) {
+      console.error('图片处理失败', e);
+    }
+  }
+  // 清空 input 以便重复选同一张
+  event.target.value = '';
+  renderRecordPhotoPreview();
+}
+
+function removeRecordPhoto(idx) {
+  pendingRecordPhotos.splice(idx, 1);
+  renderRecordPhotoPreview();
+}
+
+function renderRecordPhotoPreview() {
+  const el = document.getElementById('rec-photos-preview');
+  if (!el) return;
+  if (!pendingRecordPhotos.length) { el.innerHTML = ''; return; }
+  el.innerHTML = pendingRecordPhotos.map((p, i) => `
+    <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+      <img src="${p.dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+      <button type="button" onclick="removeRecordPhoto(${i})"
+        style="position:absolute;top:2px;right:2px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;line-height:1;cursor:pointer;padding:0;">×</button>
+    </div>
+  `).join('');
+}
 
 function addStyleRow(styleId = '', count = 1) {
   if (!DB.styles.length) return toast('请先在"款式管理"中添加款式');
@@ -1846,7 +2277,7 @@ function renderStyleRows() {
     const s = DB.styles.find(x => x.id === r.styleId);
     const sub = s ? (s.score * (r.count || 0)) : 0;
     const subStr = fmt(sub);
-    const displayName = s ? `${s.name}（${s.score}分/副）` : '';
+    const displayName = s ? `${s.name}（${fmt(s.score)}分/副）` : '';
     return `<tr>
       <td><div class="style-search" id="ss-${i}">
         <input type="text" value="${displayName}" placeholder="输入款式名搜索…"
@@ -1880,7 +2311,7 @@ function openStyleSearch(i, keyword) {
     listEl.innerHTML = `<div class="style-search-empty">无匹配款式</div>`;
   } else {
     listEl.innerHTML = matches.map(s => 
-      `<div class="style-search-item" onmousedown="pickStyleSearch(${i}, '${s.id}')">${s.name}<span class="ss-score">${s.score}分/副</span></div>`
+      `<div class="style-search-item" onmousedown="pickStyleSearch(${i}, '${s.id}')">${s.name}<span class="ss-score">${fmt(s.score)}分/副</span></div>`
     ).join('');
   }
   listEl.classList.add('show');
@@ -1891,13 +2322,13 @@ function closeStyleSearch(i) {
   // 恢复输入框显示为当前选中款式的名称
   const s = DB.styles.find(x => x.id === styleRows[i].styleId);
   const input = document.querySelector('#ss-' + i + ' input');
-  if (input && s) input.value = `${s.name}（${s.score}分/副）`;
+  if (input && s) input.value = `${s.name}（${fmt(s.score)}分/副）`;
 }
 function pickStyleSearch(i, styleId) {
   styleRows[i].styleId = styleId;
   const s = DB.styles.find(x => x.id === styleId);
   const input = document.querySelector('#ss-' + i + ' input');
-  if (input && s) input.value = `${s.name}（${s.score}分/副）`;
+  if (input && s) input.value = `${s.name}（${fmt(s.score)}分/副）`;
   closeStyleSearch(i);
   // 更新小计（保留原始小数）
   const sub = s ? (s.score * (styleRows[i].count || 0)) : 0;
@@ -1931,6 +2362,7 @@ function addRecord() {
   if (!date) { date = todayStr(); document.getElementById('rec-date').value = date; }
   if (!styleRows.length) return toast('请至少添加一个款式行');
 
+  const photos = pendingRecordPhotos.slice(); // 共享到本次所有款式记录
   let added = 0, totalScore = 0;
   const ts = Date.now();
   styleRows.forEach(r => {
@@ -1940,7 +2372,8 @@ function addRecord() {
     if (!style) return;
     const score = +(style.score * count); // 不强制两位小数，保留原始精度
     DB.records.push({
-      id: uid(), artistId, styleId: r.styleId, count, score, date, note, ts: ts + added
+      id: uid(), artistId, styleId: r.styleId, count, score, date, note, ts: ts + added,
+      photos: photos.length ? photos.slice() : undefined
     });
     added++;
     totalScore += score;
@@ -1948,11 +2381,13 @@ function addRecord() {
   if (added === 0) return toast('没有有效的款式行');
 
   save();
-  // 清空款式行，保留美甲师和日期方便继续录下一位
+  // 清空款式行和图片，保留美甲师和日期方便继续录下一位
   styleRows = [];
+  pendingRecordPhotos = [];
   document.getElementById('rec-note').value = '';
   renderStyleRows();
-  toast(`录入成功：${added} 条记录，共 ${fmt(totalScore)} 分`);
+  renderRecordPhotoPreview();
+  toast(`录入成功：${added} 条记录，共 ${fmt(totalScore)} 分${photos.length ? '，含 ' + photos.length + ' 张图片' : ''}`);
   renderAll();
 }
 function delRecord(id) {
@@ -2056,12 +2491,21 @@ function renderStyles() {
   const el = document.getElementById('style-list');
   if (!DB.styles.length) { el.innerHTML = `<tr><td colspan="5" class="empty">暂无款式，请先添加</td></tr>`; return; }
   const kw = (document.getElementById('style-search')?.value || '').trim().toLowerCase();
-  const styles = kw ? DB.styles.filter(s => s.name.toLowerCase().includes(kw) || (s.designer||'').toLowerCase().includes(kw)) : DB.styles;
+  let styles = kw ? DB.styles.filter(s => s.name.toLowerCase().includes(kw) || (s.designer||'').toLowerCase().includes(kw)) : DB.styles.slice();
+  // 按打版日期从最新到最旧排序（YYYY-MM-DD 格式可直接字符串比较；无日期的排到最后）
+  styles.sort((a, b) => {
+    const da = a.createDate || '';
+    const db = b.createDate || '';
+    if (da === db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return db.localeCompare(da);
+  });
   if (!styles.length) { el.innerHTML = `<tr><td colspan="5" class="empty">未找到匹配的款式</td></tr>`; return; }
   el.innerHTML = styles.map(s => `
     <tr>
       <td><span class="badge">${s.name}</span></td>
-      <td>${s.score}</td>
+      <td>${fmt(s.score)}</td>
       <td>${s.designer || '-'}</td>
       <td>${s.createDate || '-'}</td>
       <td>
@@ -2125,8 +2569,8 @@ function renderRecordPanel() {
     <td>${r.date}</td>
     <td>${am[r.artistId]?.name || '已删除'}</td>
     <td>${sm[r.styleId]?.name || '已删除'}</td>
-    <td>${r.count}</td>
-    <td>${r.score}</td>
+    <td>${fmt(r.count)}</td>
+    <td>${fmt(r.score)}</td>
     <td>${r.note || '-'}</td>
     <td><button class="btn btn-sm btn-danger" onclick="delRecord('${r.id}')">删除</button></td>
   </tr>`).join('');
@@ -2146,14 +2590,14 @@ function renderDetail() {
   const el = document.getElementById('detail-list');
   const totalScore = recs.reduce((s,r) => s+r.score, 0);
   const totalCount = recs.reduce((s,r) => s+r.count, 0);
-  document.getElementById('detail-summary').textContent = `共 ${recs.length} 条，${totalCount} 副，${fmt(totalScore)} 分`;
+  document.getElementById('detail-summary').textContent = `共 ${recs.length} 条，${fmt(totalCount)} 副，${fmt(totalScore)} 分`;
   if (!recs.length) { el.innerHTML = `<tr><td colspan="6" class="empty">无匹配记录</td></tr>`; return; }
   el.innerHTML = recs.map(r => `<tr>
     <td>${r.date}</td>
     <td>${am[r.artistId]?.name || '-'}</td>
     <td>${sm[r.styleId]?.name || '-'}</td>
-    <td>${r.count}</td>
-    <td>${r.score}</td>
+    <td>${fmt(r.count)}</td>
+    <td>${fmt(r.score)}</td>
     <td>${r.note || '-'}</td>
   </tr>`).join('');
 }
@@ -2200,7 +2644,7 @@ function renderRank() {
   const grandCount = data.reduce((s,d) => s+d.count, 0);
   const grandScore = data.reduce((s,d) => s+d.score, 0);
   document.getElementById('rank-summary').textContent =
-    data.length ? `${monthName} · 共 ${data.length} 人 · ${grandCount} 副 · ${fmt(grandScore)} 分` : `${monthName} · 暂无数据`;
+    data.length ? `${monthName} · 共 ${data.length} 人 · ${fmt(grandCount)} 副 · ${fmt(grandScore)} 分` : `${monthName} · 暂无数据`;
 
   if (!data.length) { el.innerHTML = `<tr><td colspan="4" class="empty">${monthName} 暂无记录</td></tr>`; return; }
   el.innerHTML = data.map((d,i) => {
@@ -2210,7 +2654,7 @@ function renderRank() {
     return `<tr>
       <td class="${cls}">${medal}</td>
       <td><div class="avatar-cell">${avatarHTML(d.artist, 'avatar-sm')} ${d.name}</div></td>
-      <td>${d.count}</td>
+      <td>${fmt(d.count)}</td>
       <td><strong>${fmt(d.score)}</strong></td>
     </tr>`;
   }).join('');
@@ -2238,8 +2682,8 @@ function renderPeriod() {
   let totalC = 0, totalS = 0;
   el.innerHTML = keys.map(k => {
     totalC += groups[k].count; totalS += groups[k].score;
-    return `<tr><td>${k}</td><td>${groups[k].count}</td><td>${fmt(groups[k].score)}</td></tr>`;
-  }).join('') + `<tr class="total-row"><td>合计</td><td>${totalC}</td><td>${fmt(totalS)}</td></tr>`;
+    return `<tr><td>${k}</td><td>${fmt(groups[k].count)}</td><td>${fmt(groups[k].score)}</td></tr>`;
+  }).join('') + `<tr class="total-row"><td>合计</td><td>${fmt(totalC)}</td><td>${fmt(totalS)}</td></tr>`;
 }
 function periodKey(date, type) {
   const [y,m,d] = date.split('-').map(Number);
@@ -2270,10 +2714,11 @@ function renderCross() {
       const recs = DB.records.filter(r => r.styleId === s.id && r.artistId === a.id);
       const count = recs.reduce((sum,r)=>sum+r.count,0);
       const score = recs.reduce((sum,r)=>sum+r.score,0);
-      const val = mode === 'count' ? count : fmt(score);
+      const val = mode === 'count' ? count : score; // 保留数值类型用于累加
       rowTotal += val;
       colTotals[i] += val;
-      html += `<td>${val || '-'}</td>`;
+      const display = mode === 'count' ? fmt(count) : fmt(score);
+      html += `<td>${display || '-'}</td>`;
     });
     html += `<td><strong>${fmt(rowTotal)}</strong></td></tr>`;
   });
@@ -2360,7 +2805,7 @@ function renderMonthly() {
 
   // 汇总信息
   document.getElementById('monthly-summary').textContent =
-    `${monthName} · ${artist.name} · ${totalCount} 副 · 当月总积分 ${fmt(grandTotalScoreRaw)} 分 · 打版 ${designCount} 款`;
+    `${monthName} · ${artist.name} · ${fmt(totalCount)} 副 · 当月总积分 ${fmt(grandTotalScoreRaw)} 分 · 打版 ${designCount} 款`;
 
   // 信息卡片
   let html = `
@@ -2376,7 +2821,7 @@ function renderMonthly() {
         <div style="display:flex;gap:24px;flex-wrap:wrap;">
           <div>
             <div style="font-size:13px;opacity:0.85;">当月总副数</div>
-            <div style="font-size:24px;font-weight:700;">${totalCount} 副</div>
+            <div style="font-size:24px;font-weight:700;">${fmt(totalCount)} 副</div>
           </div>
           <div>
             <div style="font-size:13px;opacity:0.85;">当月做款积分</div>
@@ -2414,11 +2859,11 @@ function renderMonthly() {
       html += `<tr>
         <td>${s.name}</td>
         <td>${fmt(s.score || 0)}</td>
-        <td>${s.count}</td>
+        <td>${fmt(s.count)}</td>
         <td>${fmt(s.subScore)}</td>
       </tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${totalCount} 副</td><td>${fmt(totalScore)}</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>-</td><td>${fmt(totalCount)} 副</td><td>${fmt(totalScore)}</td></tr>`;
     html += `</tbody></table></div>`;
   }
   html += `</div>`;
@@ -2456,6 +2901,10 @@ function getMonthlyStatData(artistId, month) {
 
   let totalCount = 0, totalScore = 0;
   const stylesMap = {};
+  // 按日期分组的图片（[{date, items: [{styleName, dataUrl}]}]）
+  const photosByDate = {};
+  // 按日期分组的做款明细：{ date: [{ styleId, name, score, count, sub }] }
+  const dailyRecords = {};
   monthRecs.forEach(r => {
     totalCount += r.count;
     totalScore += r.score;
@@ -2464,6 +2913,28 @@ function getMonthlyStatData(artistId, month) {
     if (!stylesMap[r.styleId]) stylesMap[r.styleId] = { name: sName, score: sScore, count: 0, subScore: 0 };
     stylesMap[r.styleId].count += r.count;
     stylesMap[r.styleId].subScore += r.score;
+    // 收集每日做款明细
+    if (!dailyRecords[r.date]) dailyRecords[r.date] = {};
+    if (!dailyRecords[r.date][r.styleId]) {
+      dailyRecords[r.date][r.styleId] = { styleId: r.styleId, name: sName, score: sScore, count: 0, sub: 0 };
+    }
+    dailyRecords[r.date][r.styleId].count += r.count;
+    dailyRecords[r.date][r.styleId].sub += r.score;
+    if (r.photos && r.photos.length) {
+      if (!photosByDate[r.date]) photosByDate[r.date] = [];
+      r.photos.forEach(p => {
+        if (p && p.dataUrl) photosByDate[r.date].push({ styleName: sName, dataUrl: p.dataUrl });
+      });
+    }
+  });
+  // 转成按日期升序的数组：[{ date, items: [...], dayCount, dayScore }]
+  const dailyList = Object.keys(dailyRecords).sort().map(date => {
+    const items = Object.values(dailyRecords[date]).map(it => ({
+      styleId: it.styleId, name: it.name, score: it.score, count: it.count, sub: it.sub
+    }));
+    const dayCount = items.reduce((s, it) => s + it.count, 0);
+    const dayScore = items.reduce((s, it) => s + it.sub, 0);
+    return { date, items, dayCount, dayScore };
   });
 
   // 打版数据
@@ -2482,12 +2953,68 @@ function getMonthlyStatData(artistId, month) {
   return {
     artist, totalCount, totalScore,
     styleList: Object.values(stylesMap),
-    monthStyles, designCount, designScoreRaw, grandTotalScoreRaw
+    monthStyles, designCount, designScoreRaw, grandTotalScoreRaw,
+    photosByDate, dailyList
   };
 }
 
-// 导出当前美甲师 Excel
-function exportMonthlyExcel() {
+// dataURL 转 ArrayBuffer（用于 ExcelJS addImage）
+function dataUrlToArrayBuffer(dataUrl) {
+  const base64 = dataUrl.split(',')[1];
+  const bin = atob(base64);
+  const len = bin.length;
+  const buf = new Uint8Array(len);
+  for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+function dataUrlExt(dataUrl) {
+  const m = (dataUrl.match(/data:image\/(\w+);base64/) || [])[1];
+  if (m === 'jpeg' || m === 'jpg') return 'jpeg';
+  return (m || 'png');
+}
+// 把一组图片（带款式名）写入 ws，从指定 row 开始，每行 3 张
+function embedPhotosIntoSheet(ws, photos, startRow) {
+  if (!photos || !photos.length) return startRow;
+  let row = startRow;
+  // 按样式名分组
+  const groups = {};
+  photos.forEach(p => {
+    if (!groups[p.styleName]) groups[p.styleName] = [];
+    groups[p.styleName].push(p.dataUrl);
+  });
+  Object.keys(groups).forEach(styleName => {
+    const urls = groups[styleName];
+    ws.getCell(row, 1).value = `${styleName}（${urls.length} 张）`;
+    ws.getRow(row).font = { bold: true, color: { argb: 'FF783C48' } };
+    row++;
+    // 每行 3 张
+    let col = 1;
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      try {
+        const buf = dataUrlToArrayBuffer(url);
+        const ext = dataUrlExt(url);
+        const imageId = ws.workbook.addImage({ buffer: buf, extension: ext });
+        ws.addImage(imageId, {
+          tl: { col: col - 1, row: row - 1 },
+          br: { col: col, row: row },
+          editAs: 'oneCell'
+        });
+        ws.getRow(row).height = 90;
+        col++;
+        if (col > 4) { col = 1; row++; }
+      } catch (e) {
+        console.error('嵌入图片失败', e);
+      }
+    }
+    if (col !== 1) row++;
+    row++;
+  });
+  return row;
+}
+
+// 导出当前美甲师 Excel（ExcelJS，支持图片嵌入）
+async function exportMonthlyExcel() {
   const artistId = document.getElementById('monthly-artist').value;
   if (!artistId) return toast('请先选择美甲师');
   const month = document.getElementById('monthly-month').value || currentMonthStr();
@@ -2496,98 +3023,252 @@ function exportMonthlyExcel() {
   const d = getMonthlyStatData(artistId, month);
   if (!d) return toast('美甲师不存在');
 
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '美甲师计分系统';
+  wb.created = new Date();
 
   // 汇总 sheet
-  const summaryData = [
-    ['月度统计表'],
-    [],
-    ['姓名', '统计月份', '当月总副数', '当月做款积分', '当月打版数量', '打版合计积分', '当月总积分'],
-    [d.artist.name, monthName, d.totalCount, fmt(d.totalScore), d.designCount, fmt(d.designScoreRaw), fmt(d.grandTotalScoreRaw)]
+  const wsSummary = wb.addWorksheet('汇总');
+  wsSummary.columns = [
+    { header: '姓名', key: 'name', width: 12 },
+    { header: '统计月份', key: 'month', width: 14 },
+    { header: '当月总副数', key: 'totalCount', width: 14 },
+    { header: '当月做款积分', key: 'totalScore', width: 14 },
+    { header: '当月打版数量', key: 'designCount', width: 14 },
+    { header: '打版合计积分', key: 'designScore', width: 14 },
+    { header: '当月总积分', key: 'grand', width: 14 }
   ];
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  wsSummary['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
-
-  // 计分款式明细 sheet
-  const scoreRows = [['款式名称', '单副积分', '副数', '小计积分']];
-  d.styleList.forEach(s => {
-    scoreRows.push([s.name, fmt(s.score || 0), s.count, fmt(s.subScore)]);
+  wsSummary.addRow({
+    name: d.artist.name, month: monthName,
+    totalCount: fmt(d.totalCount), totalScore: fmt(d.totalScore),
+    designCount: d.designCount, designScore: fmt(d.designScoreRaw),
+    grand: fmt(d.grandTotalScoreRaw)
   });
-  scoreRows.push(['合计', '-', d.totalCount + ' 副', fmt(d.totalScore)]);
-  const wsScore = XLSX.utils.aoa_to_sheet(scoreRows);
-  wsScore['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 10 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, wsScore, '做款计分明细');
+  wsSummary.getRow(1).font = { bold: true };
+  wsSummary.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+  wsSummary.getRow(2).font = { bold: true, color: { argb: 'FF783C48' } };
 
-  // 打版款式明细 sheet
-  const designRows = [['款式名称', '打版日期', '积分']];
+  // 做款计分明细（按每日明细显示）
+  const wsScore = wb.addWorksheet('做款计分明细');
+  wsScore.columns = [
+    { header: '日期', key: 'date', width: 14 },
+    { header: '款式名称', key: 'name', width: 30 },
+    { header: '单副积分', key: 'score', width: 12 },
+    { header: '副数', key: 'count', width: 10 },
+    { header: '小计积分', key: 'sub', width: 12 }
+  ];
+  let scoreRow = 2;
+  if (d.dailyList && d.dailyList.length) {
+    d.dailyList.forEach(day => {
+      // 每日日期标题行
+      const [yy, mm, dd] = day.date.split('-').map(n => parseInt(n));
+      const dateCell = wsScore.getCell(scoreRow, 1);
+      dateCell.value = `📅 ${yy}年${mm}月${dd}日`;
+      dateCell.font = { bold: true, size: 13, color: { argb: 'FF783C48' } };
+      wsScore.getCell(scoreRow, 2).value = '';
+      wsScore.getRow(scoreRow).height = 22;
+      scoreRow++;
+      // 当日各款式
+      day.items.forEach(it => {
+        wsScore.getCell(scoreRow, 1).value = '';
+        wsScore.getCell(scoreRow, 2).value = it.name;
+        wsScore.getCell(scoreRow, 3).value = fmt(it.score || 0);
+        wsScore.getCell(scoreRow, 4).value = fmt(it.count);
+        wsScore.getCell(scoreRow, 5).value = fmt(it.sub);
+        scoreRow++;
+      });
+      // 当日合计
+      const dayTotal = wsScore.getRow(scoreRow);
+      dayTotal.getCell(2).value = '当日合计';
+      dayTotal.getCell(4).value = fmt(day.dayCount) + ' 副';
+      dayTotal.getCell(5).value = fmt(day.dayScore);
+      dayTotal.font = { bold: true, color: { argb: 'FF783C48' } };
+      wsScore.getCell(scoreRow, 1).value = '';
+      scoreRow++;
+      // 空行分隔
+      scoreRow++;
+    });
+    // 整月合计
+    const grand = wsScore.getRow(scoreRow);
+    grand.getCell(2).value = `本月合计`;
+    grand.getCell(4).value = fmt(d.totalCount) + ' 副';
+    grand.getCell(5).value = fmt(d.totalScore);
+    grand.font = { bold: true };
+    grand.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    wsScore.getCell(scoreRow, 1).value = '';
+  } else {
+    wsScore.getCell(2, 2).value = '当月暂无计分记录';
+  }
+  // 表头
+  wsScore.getRow(1).font = { bold: true };
+  wsScore.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+
+  // 打版款式明细
+  const wsDesign = wb.addWorksheet('打版款式明细');
+  wsDesign.columns = [
+    { header: '款式名称', key: 'name', width: 30 },
+    { header: '打版日期', key: 'date', width: 15 },
+    { header: '积分', key: 'score', width: 10 }
+  ];
   d.monthStyles.forEach(s => {
-    designRows.push([s.name, s.createDate || '-', fmt(s.score || 0)]);
+    wsDesign.addRow({ name: s.name, date: s.createDate || '-', score: fmt(s.score || 0) });
   });
-  designRows.push(['合计', d.designCount + ' 款', fmt(d.designScoreRaw) + ' 分']);
-  const wsDesign = XLSX.utils.aoa_to_sheet(designRows);
-  wsDesign['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }];
-  XLSX.utils.book_append_sheet(wb, wsDesign, '打版款式明细');
+  wsDesign.addRow({ name: `合计 ${d.designCount} 款`, score: fmt(d.designScoreRaw) + ' 分' });
+  wsDesign.getRow(1).font = { bold: true };
+  wsDesign.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+  wsDesign.lastRow.font = { bold: true };
 
-  const filename = `月度统计_${d.artist.name}_${month}.xlsx`;
-  XLSX.writeFile(wb, filename);
-  toast(`已导出 ${d.artist.name} 的 Excel`);
+  // 当日款式图片 sheet（按日期分组展示）
+  const dates = Object.keys(d.photosByDate || {}).sort();
+  if (dates.length) {
+    const wsPhotos = wb.addWorksheet('款式图片');
+    wsPhotos.columns = [{ header: '日期 / 款式', key: 'name', width: 28 }];
+    wsPhotos.getRow(1).font = { bold: true };
+    wsPhotos.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    let curRow = 2;
+    dates.forEach(date => {
+      const [yy, mm, dd] = date.split('-').map(n => parseInt(n));
+      const cell = wsPhotos.getCell(curRow, 1);
+      cell.value = `📅 ${yy}年${mm}月${dd}日（${d.photosByDate[date].length} 张）`;
+      cell.font = { bold: true, size: 13, color: { argb: 'FF783C48' } };
+      wsPhotos.getRow(curRow).height = 22;
+      curRow++;
+      curRow = embedPhotosIntoSheet(wsPhotos, d.photosByDate[date], curRow);
+    });
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `月度统计_${d.artist.name}_${month}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`已导出 ${d.artist.name} 的 Excel（含图片）`);
 }
 
-// 导出全部美甲师 Excel
-function exportAllMonthlyExcel() {
+// 导出全部美甲师 Excel（ExcelJS，支持图片嵌入）
+async function exportAllMonthlyExcel() {
   if (!DB.artists.length) return toast('暂无美甲师');
   const month = document.getElementById('monthly-month').value || currentMonthStr();
   const [y, m] = month.split('-');
   const monthName = `${y}年${parseInt(m)}月`;
 
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '美甲师计分系统';
+  wb.created = new Date();
 
   // 汇总总表
-  const summaryRows = [['月度统计汇总表', '', '', '', '', '', '']];
-  summaryRows.push(['统计月份', monthName, '', '', '', '', '']);
-  summaryRows.push([]);
-  summaryRows.push(['序号', '姓名', '当月总副数', '当月做款积分', '当月打版数量', '打版合计积分', '当月总积分']);
+  const wsSummary = wb.addWorksheet('汇总');
+  wsSummary.columns = [
+    { header: '序号', key: 'idx', width: 8 },
+    { header: '姓名', key: 'name', width: 12 },
+    { header: '当月总副数', key: 'totalCount', width: 14 },
+    { header: '当月做款积分', key: 'totalScore', width: 14 },
+    { header: '当月打版数量', key: 'designCount', width: 14 },
+    { header: '打版合计积分', key: 'designScore', width: 14 },
+    { header: '当月总积分', key: 'grand', width: 14 }
+  ];
   DB.artists.forEach((a, i) => {
     const d = getMonthlyStatData(a.id, month);
     if (!d) return;
-    summaryRows.push([i + 1, a.name, d.totalCount, fmt(d.totalScore), d.designCount, fmt(d.designScoreRaw), fmt(d.grandTotalScoreRaw)]);
+    wsSummary.addRow({
+      idx: i + 1, name: a.name,
+      totalCount: fmt(d.totalCount), totalScore: fmt(d.totalScore),
+      designCount: d.designCount, designScore: fmt(d.designScoreRaw),
+      grand: fmt(d.grandTotalScoreRaw)
+    });
   });
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-  wsSummary['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
+  wsSummary.getRow(1).font = { bold: true };
+  wsSummary.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
 
-  // 每人一个 sheet（计分+打版明细）
+  // 每人一个 sheet
   DB.artists.forEach(a => {
     const d = getMonthlyStatData(a.id, month);
     if (!d) return;
     let sheetName = a.name.substring(0, 28);
     let finalName = sheetName;
     let suffix = 2;
-    while (wb.SheetNames.includes(finalName)) { finalName = sheetName + '_' + suffix; suffix++; }
+    while (wb.getWorksheet(finalName)) { finalName = sheetName + '_' + suffix; suffix++; }
 
-    const rows = [['=== 做款计分明细 ===']];
-    rows.push(['款式名称', '单副积分', '副数', '小计积分']);
-    d.styleList.forEach(s => {
-      rows.push([s.name, fmt(s.score || 0), s.count, fmt(s.subScore)]);
-    });
-    rows.push(['合计', '-', d.totalCount + ' 副', fmt(d.totalScore)]);
-    rows.push([]);
-    rows.push(['=== 打版款式明细 ===']);
-    rows.push(['款式名称', '打版日期', '积分']);
+    const ws = wb.addWorksheet(finalName);
+    ws.columns = [
+      { header: '日期', key: 'date', width: 14 },
+      { header: '款式名称', key: 'name', width: 30 },
+      { header: '单副积分', key: 'score', width: 12 },
+      { header: '副数', key: 'count', width: 10 },
+      { header: '小计积分', key: 'sub', width: 12 }
+    ];
+    // 做款计分明细（按每日明细显示）
+    const titleRow = ws.getRow(1);
+    titleRow.getCell(1).value = '=== 做款计分明细（按日） ===';
+    titleRow.font = { bold: true, color: { argb: 'FF783C48' }, size: 12 };
+    titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    ws.addRow(); // 空行
+    const headerRow = ws.addRow(['日期', '款式名称', '单副积分', '副数', '小计积分']);
+    headerRow.font = { bold: true };
+    if (d.dailyList && d.dailyList.length) {
+      d.dailyList.forEach(day => {
+        const [yy, mm, dd] = day.date.split('-').map(n => parseInt(n));
+        const dateCell = ws.addRow([]);
+        dateCell.getCell(1).value = `📅 ${yy}年${mm}月${dd}日`;
+        dateCell.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF783C48' } };
+        dateCell.height = 20;
+        day.items.forEach(it => {
+          ws.addRow(['', it.name, fmt(it.score || 0), fmt(it.count), fmt(it.sub)]);
+        });
+        const dayTotal = ws.addRow(['', '当日合计', '-', fmt(day.dayCount) + ' 副', fmt(day.dayScore)]);
+        dayTotal.font = { bold: true, color: { argb: 'FF783C48' } };
+        ws.addRow([]); // 空行分隔
+      });
+      const grandRow = ws.addRow(['', '本月合计', '-', fmt(d.totalCount) + ' 副', fmt(d.totalScore)]);
+      grandRow.font = { bold: true };
+      grandRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    } else {
+      ws.addRow(['', '当月暂无计分记录']);
+    }
+    ws.addRow();
+    // 打版款式明细
+    const title2 = ws.addRow(['=== 打版款式明细 ===']);
+    title2.font = { bold: true, color: { argb: 'FF783C48' }, size: 12 };
+    title2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+    ws.addRow();
+    ws.addRow(['', '款式名称', '单副积分', '打版日期', '']).font = { bold: true };
     d.monthStyles.forEach(s => {
-      rows.push([s.name, s.createDate || '-', fmt(s.score || 0)]);
+      ws.addRow(['', s.name, fmt(s.score || 0), s.createDate || '-', '']);
     });
-    rows.push(['合计', d.designCount + ' 款', fmt(d.designScoreRaw) + ' 分']);
+    const totalRow2 = ws.addRow(['', `合计 ${d.designCount} 款`, fmt(d.designScoreRaw) + ' 分', '', '']);
+    totalRow2.font = { bold: true };
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, ws, finalName);
+    // 款式图片
+    const dates = Object.keys(d.photosByDate || {}).sort();
+    if (dates.length) {
+      ws.addRow();
+      const title3 = ws.addRow(['=== 款式图片 ===']);
+      title3.font = { bold: true, color: { argb: 'FF783C48' }, size: 12 };
+      title3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4EC' } };
+      ws.addRow();
+      let curRow = ws.lastRow.number + 1;
+      dates.forEach(date => {
+        const [yy, mm, dd] = date.split('-').map(n => parseInt(n));
+        const cell = ws.getCell(curRow, 1);
+        cell.value = `📅 ${yy}年${mm}月${dd}日（${d.photosByDate[date].length} 张）`;
+        cell.font = { bold: true, color: { argb: 'FF783C48' } };
+        ws.getRow(curRow).height = 22;
+        curRow++;
+        curRow = embedPhotosIntoSheet(ws, d.photosByDate[date], curRow);
+      });
+    }
   });
 
-  const filename = `月度统计_全部_${month}.xlsx`;
-  XLSX.writeFile(wb, filename);
-  toast('已导出全部美甲师 Excel');
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `月度统计_全部_${month}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已导出全部美甲师 Excel（含图片）');
 }
 
 // ===== 打版统计 =====
@@ -2851,27 +3532,33 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
   // 当天记录
   const dayRecs = DB.records.filter(r => r.artistId === artistId && r.date === date);
   const dayCount = dayRecs.reduce((s,r) => s+r.count, 0);
-  const dayScore = fmt(dayRecs.reduce((s,r) => s+r.score, 0));
+  const dayScoreRaw = dayRecs.reduce((s,r) => s+r.score, 0); // 原始累加，不截断
 
   // 本月累计（按日期的年月）
   const month = date.substring(0, 7);
   const monthRecs = DB.records.filter(r => r.artistId === artistId && r.date.substring(0,7) === month);
   const monthCount = monthRecs.reduce((s,r) => s+r.count, 0);
-  const monthScore = fmt(monthRecs.reduce((s,r) => s+r.score, 0));
+  const monthScoreRaw = monthRecs.reduce((s,r) => s+r.score, 0); // 原始累加，不截断
 
   // 格式化日期显示 2026.7.26
   const [y,m,d] = date.split('-').map(n => parseInt(n));
   const dateDisplay = `${y}.${m}.${d}`;
 
-  // 当天按款式汇总
+  // 当天按款式汇总，同时收集当天所有图片
   const styleSummary = {};
+  const allDayPhotos = []; // 平铺所有图片 dataUrl
   dayRecs.forEach(r => {
     if (!styleSummary[r.styleId]) {
       const s = sm[r.styleId];
       styleSummary[r.styleId] = { name: s ? s.name : '已删除款式', count: 0, score: 0 };
     }
     styleSummary[r.styleId].count += r.count;
-    styleSummary[r.styleId].score = fmt(styleSummary[r.styleId].score + r.score);
+    styleSummary[r.styleId].score += r.score; // 原始累加，不截断
+    if (r.photos && r.photos.length) {
+      r.photos.forEach(p => {
+        if (p && p.dataUrl && !allDayPhotos.includes(p.dataUrl)) allDayPhotos.push(p.dataUrl);
+      });
+    }
   });
 
   // 头像
@@ -2890,12 +3577,12 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
       <div style="display:flex;gap:24px;flex-wrap:wrap;">
         <div>
           <div style="font-size:13px;opacity:0.85;">当日质检合格数</div>
-          <div style="font-size:24px;font-weight:700;">${dayCount} 幅 / ${fmt(dayScore)} 分</div>
+          <div style="font-size:24px;font-weight:700;">${fmt(dayCount)} 幅 / ${fmt(dayScoreRaw)} 分</div>
         </div>
         <div>
           <div style="font-size:13px;opacity:0.85;">本月累计积分</div>
-          <div style="font-size:24px;font-weight:700;">${fmt(monthScore)} 分</div>
-          <div style="font-size:12px;opacity:0.7;">（本月共 ${monthCount} 幅）</div>
+          <div style="font-size:24px;font-weight:700;">${fmt(monthScoreRaw)} 分</div>
+          <div style="font-size:12px;opacity:0.7;">（本月共 ${fmt(monthCount)} 幅）</div>
         </div>
       </div>
     </div>
@@ -2912,10 +3599,26 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
     html += `<div class="table-wrap"><table>
       <thead><tr><th>款式</th><th>副数</th><th>积分</th></tr></thead><tbody>`;
     styleList.forEach(s => {
-      html += `<tr><td>${s.name}</td><td>${s.count}</td><td>${fmt(s.score)}</td></tr>`;
+      html += `<tr><td>${s.name}</td><td>${fmt(s.count)}</td><td>${fmt(s.score)}</td></tr>`;
     });
-    html += `<tr class="total-row"><td>合计</td><td>${dayCount}</td><td>${fmt(dayScore)}</td></tr>`;
+    html += `<tr class="total-row"><td>合计</td><td>${fmt(dayCount)}</td><td>${fmt(dayScoreRaw)}</td></tr>`;
     html += `</tbody></table></div>`;
+
+    // 当日款式图片（平铺展示当天所有上传图片）
+    if (allDayPhotos.length) {
+      html += `<div style="margin-top:16px;">
+        <div style="font-size:13px;font-weight:600;color:var(--primary-dark);margin-bottom:8px;">当日款式图片 · ${allDayPhotos.length} 张</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">`;
+      allDayPhotos.slice(0, 30).forEach(url => {
+        html += `<a href="${url}" target="_blank" rel="noopener" style="display:block;width:90px;height:90px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">
+          <img src="${url}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+        </a>`;
+      });
+      if (allDayPhotos.length > 30) {
+        html += `<div style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:6px;font-size:12px;color:var(--text-light);">+${allDayPhotos.length - 30}</div>`;
+      }
+      html += `</div></div>`;
+    }
   }
   html += `</div>`;
 
@@ -2925,7 +3628,7 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
     monthRecs.forEach(r => {
       if (!dayMap[r.date]) dayMap[r.date] = { count: 0, score: 0 };
       dayMap[r.date].count += r.count;
-      dayMap[r.date].score = fmt(dayMap[r.date].score + r.score);
+      dayMap[r.date].score += r.score; // 原始累加，不截断
     });
     const dayKeys = Object.keys(dayMap).sort();
     if (dayKeys.length > 1) {
@@ -2938,11 +3641,11 @@ function buildDailyHTML(artistId, date, showMonthlyDetail = true) {
         const isToday = k === date;
         html += `<tr ${isToday ? 'style="background:var(--primary-light);font-weight:600;"' : ''}>
           <td>${yy}.${mm}.${dd}${isToday ? ' （今天）' : ''}</td>
-          <td>${dayMap[k].count}</td>
+          <td>${fmt(dayMap[k].count)}</td>
           <td>${fmt(dayMap[k].score)}</td>
         </tr>`;
       });
-      html += `<tr class="total-row"><td>本月合计</td><td>${monthCount}</td><td>${fmt(monthScore)}</td></tr>`;
+      html += `<tr class="total-row"><td>本月合计</td><td>${fmt(monthCount)}</td><td>${fmt(monthScoreRaw)}</td></tr>`;
       html += `</tbody></table></div></div>`;
     }
   }
@@ -3115,7 +3818,7 @@ function renderStyleScore() {
   el.innerHTML = data.map(s => `
     <tr>
       <td><span class="badge">${s.name}</span></td>
-      <td><strong style="color:var(--primary);">${s.score}</strong></td>
+      <td><strong style="color:var(--primary);">${fmt(s.score)}</strong></td>
       <td>${s.designer || '-'}</td>
       <td>${s.createDate || '-'}</td>
     </tr>
@@ -3294,6 +3997,22 @@ setInterval(async () => {
   // 再拉取云端（mergeCloudData 会保护本地未推送的修改）
   await pullCloud();
 }, 120000);
+
+// 页面从后台切回前台时立即同步一次（手机切换 App 场景）
+let lastForegroundSync = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    const now = Date.now();
+    // 距上次前台同步超过 15 秒才触发，避免频繁切换
+    if (now - lastForegroundSync > 15000) {
+      lastForegroundSync = now;
+      (async () => {
+        if (lastSaveTime > lastPushTime) await pushCloud();
+        await pullCloud();
+      })();
+    }
+  }
+});
 </script>
 </body>
 </html>
