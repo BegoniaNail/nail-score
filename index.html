@@ -860,9 +860,14 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn" style="background:var(--primary-light);" onclick="manualSync()">🔄 手动同步</button>
         <button class="btn" style="background:#eee;" onclick="exportData()">💾 导出数据到文件</button>
+        <label class="btn" style="background:#eee;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+          📥 导入数据文件
+          <input type="file" accept="application/json,.json" style="display:none;" onchange="importData(event)">
+        </label>
         <button class="btn" style="background:#c0505a;color:#fff;" onclick="clearGithubToken()">🗑️ 清除 Token</button>
       </div>
       <div id="sync-info" style="margin-top:12px;font-size:12px;color:var(--text-light);"></div>
+      <div id="sync-error-detail" style="margin-top:8px;font-size:12px;color:#c0505a;display:none;"></div>
     </div>
   </div>
 
@@ -1193,7 +1198,9 @@ async function pushGitHub(skipConflictRecovery = false) {
       clearToken();
       setSync('offline');
       SYNCING = false;
-      toast('Token 无效，请重新输入');
+      const msg = 'Token 无效，请重新输入';
+      setSyncError(msg);
+      toast(msg);
       promptToken(() => pushGitHub());
       return false;
     }
@@ -1205,19 +1212,33 @@ async function pushGitHub(skipConflictRecovery = false) {
       await pullCloud();
       return await pushGitHub(true);
     }
-    if (!res.ok) throw new Error('GitHub push failed: ' + res.status);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error('GitHub push failed', res.status, errText);
+      throw new Error('GitHub push failed: ' + res.status);
+    }
     const info = await res.json();
     ghDataSha = info.content.sha; // 更新 sha
     lastPushTime = Date.now(); // 记录成功推送时间
     savePushTime();
     setSync('ok');
     SYNCING = false;
+    setSyncError('');
     return true;
   } catch(e) {
     console.error('GitHub push error', e);
     SYNCING = false;
     setSync('offline');
-    toast('⚠️ 云端同步失败，数据已保存在本机。恢复网络后会自动重试');
+    let detail = '';
+    if (e && e.name === 'AbortError') {
+      detail = '⚠️ 推送超时（30秒）。可能是网络较慢或无法访问 GitHub，建议切换网络或开启代理。';
+    } else if (e && e.message && e.message.includes('fetch')) {
+      detail = '⚠️ 网络错误：无法连接到 GitHub API。在中国大陆通常需要代理/VPN 才能推送。';
+    } else {
+      detail = '⚠️ 推送失败：' + (e && e.message ? e.message : '网络错误');
+    }
+    setSyncError(detail + '<br>数据已保存在本机，恢复网络后会自动重试。');
+    toast(detail);
     // GitHub 失败时尝试 jsonblob 备用
     console.log('尝试 jsonblob 备用推送...');
     return await pushJsonblob();
@@ -1564,6 +1585,11 @@ function renderSyncConfig() {
     info.innerHTML = `仓库：<code>${GH_OWNER}/${GH_REPO}/${GH_DATA_PATH}</code> · 分支：<code>${GH_BRANCH}</code>` +
       (ghDataSha ? `<br>文件 SHA：<code>${ghDataSha.substring(0,8)}...</code>` : '');
   }
+  const errEl = document.getElementById('sync-error-detail');
+  if (errEl && lastSyncError) {
+    errEl.innerHTML = lastSyncError;
+    errEl.style.display = 'block';
+  }
 }
 function saveTokenFromConfig() {
   const t = document.getElementById('synconfig-token').value.trim();
@@ -1577,13 +1603,19 @@ function saveTokenFromConfig() {
 }
 async function manualSync() {
   toast('正在同步...');
-  await pullCloud();
-  const ok = await pushCloud();
+  setSyncError('');
+  const pullOk = await pullCloud();
+  const pushOk = await pushCloud();
   renderSyncConfig();
-  if (ok) {
+  if (pullOk && pushOk) {
     toast('✅ 同步完成，云端已是最新');
+    setSyncError('');
+  } else if (!pullOk && !pushOk) {
+    toast('⚠️ 同步失败：无法连接 GitHub');
+  } else if (!pushOk) {
+    toast('⚠️ 推送失败，数据已保存在本机');
   } else {
-    toast('⚠️ 推送失败，数据已保存在本机，请检查网络后重试');
+    toast('⚠️ 拉取失败，但推送成功');
   }
 }
 function exportData() {
@@ -1595,6 +1627,44 @@ function exportData() {
   a.click();
   URL.revokeObjectURL(url);
   toast('数据已导出');
+}
+function importData(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (!requireLogin()) return;
+  requireConfirm('导入会合并文件中的数据到本地，不会覆盖现有记录。确认导入？', function() {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data || typeof data !== 'object') throw new Error('文件格式错误');
+        if (!data.records && !data.styles && !data.artists) throw new Error('不是有效的备份文件');
+        mergeCloudData(data);
+        save();
+        renderAll();
+        toast('✅ 导入成功，数据已合并');
+      } catch (err) {
+        toast('导入失败：' + err.message);
+      }
+    };
+    reader.onerror = () => toast('读取文件失败');
+    reader.readAsText(file);
+  });
+  // 清空 input 允许重复选同一文件
+  event.target.value = '';
+}
+let lastSyncError = '';
+function setSyncError(detail) {
+  lastSyncError = detail;
+  const el = document.getElementById('sync-error-detail');
+  if (el) {
+    if (detail) {
+      el.innerHTML = detail;
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
+  }
 }
 
 // ===== 款式 =====
